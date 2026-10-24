@@ -53,6 +53,7 @@ Those rules became a model. To check them against real people rather than one ga
 | `export/` | Track naming for each target. |
 | `test/` | Self-tests and a terminal driver. |
 | `docs/` | History, WolvenKit guide, measurements, profiles, security. |
+| `claude/skills/cyberpunk-face-viewer/` | A Claude skill that builds a 3D face viewer **on your own PC from your own game files**: game clips and LipScan curves played on a character's real head, side by side. No game data or prebuilt viewer is shipped. |
 
 ## Requirements
 
@@ -103,6 +104,15 @@ Those rules became a model. To check them against real people rather than one ga
   python model\lipsync.py voice.wav --words words.json --export cyberpunk --out curves.json
   ```
   `--words` takes timed words: `[[0.42, "maybe"], [0.80, "you"], ...]`.
+
+## See it on a real head (Cyberpunk 2077)
+
+LipScan doesn't ship a viewer or any game data. Instead, `claude/skills/cyberpunk-face-viewer/SKILL.md` gives Claude everything it needs to build one locally from your own install:
+
+- **The converter:** reads a character's head, face skeleton and facial setup with WolvenKit.
+- **The viewer:** one offline HTML file with play/pause, a timeline, A/B comparison and a pose tester. It runs a rebuilt copy of the game's face solver.
+
+To use it, give the skill file to Claude Code (copy the folder into `.claude/skills/`, or just ask Claude to follow it).
 
 ## How well it works
 

@@ -62,6 +62,17 @@ LipScan's model uses the base pose names (`jaw_mid_open`, `lips_together_up`, `l
 - Decode `.wem` voice and music files with [vgmstream](https://github.com/vgmstream/vgmstream) (`vgmstream-cli file.wem -o file.wav`).
 - To find a song's isolated stems, follow the sound bank's HIRC chain: Event → Action → Music Switch → Random/Sequence → Segment → Music Track. The track's sources list the media IDs, which are files at `base\sound\soundbanks\media\<id>.wem`.
 
+## The face solver (how tracks move the face)
+
+Each head has a `.facialsetup` next to it (for example `<head folder>\<head>_rigsetup.facialsetup`). It holds a library of poses for the face, tongue and eyes:
+
+- **Main poses:** one per track, some with in-between steps (for example `jaw_mid_open` at 0.5 and 1.0).
+- **Corrective poses:** fire when several poses combine. They're named after their drivers, for example `jaw_mid_open1__tongue_mid_base_up__Corr`.
+
+Every pose is a list of per-bone rotation and translation **offsets** on top of the face skeleton's rest pose. `claude/skills/cyberpunk-face-viewer/SKILL.md` documents the full layout and the solver steps.
+
+Mesh export from the CLI needs mesh options. Pass them as environment variables for that run (`MeshExportArgs__withMaterials=false`, `MeshExportArgs__MaterialRepo=<temp folder>`), rather than editing WolvenKit's settings.
+
 ## Getting LipScan curves into the game (not yet tested)
 
 The path should be the reverse of reading:
@@ -72,7 +83,7 @@ The path should be the reverse of reading:
 
 **This round trip hasn't been tested in-game yet.** The open questions:
 
-- whether WolvenKit's glTF import rebuilds the compressed buffer from `extras`
+- whether WolvenKit's glTF import rebuilds the compressed buffer from `extras` (the CLI's `import` can't: it doesn't load the game archives, so it can't find the rig; the WolvenKit app may)
 - whether the game accepts a re-encoded lipsync clip
 
 Reports and fixes are welcome.

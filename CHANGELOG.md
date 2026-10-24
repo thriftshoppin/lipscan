@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **New: `claude/skills/cyberpunk-face-viewer`.** A Claude skill that builds a local 3D face viewer from the user's own Cyberpunk 2077 install:
+  - a character-pack converter, using WolvenKit
+  - the face-solver math, rebuilt from the game's facial setup
+  - a one-file offline viewer with play/pause, a timeline, A/B comparison and a pose tester
+
+  No game data or prebuilt viewer is distributed.
+- **Docs:** the WolvenKit guide now explains the facial setup, and that the CLI can't re-import animations.
+
 ## 0.1.0 (2026-10-24)
 
 First release.
