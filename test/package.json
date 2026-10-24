@@ -1,0 +1,12 @@
+{
+  "name": "lipscan-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node selftest.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "ws": "^8.22.0"
+  }
+}
