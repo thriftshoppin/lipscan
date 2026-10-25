@@ -1,0 +1,16 @@
+{
+  "format": "lipscan-mood/1",
+  "name": "sad",
+  "about": "Inner brows up, corners down, lids a little heavy.",
+  "source": "hand-made (not measured; no sad lines in the data)",
+  "tracks": {
+    "eye_l_brows_raise_in": 0.4,
+    "eye_r_brows_raise_in": 0.4,
+    "lips_l_corner_dn": 0.25,
+    "lips_r_corner_dn": 0.25,
+    "eye_l_oculi_squint_outer_upper": 0.15,
+    "eye_r_oculi_squint_outer_upper": 0.15,
+    "eye_l_dir_dn": 0.1,
+    "eye_r_dir_dn": 0.1
+  }
+}

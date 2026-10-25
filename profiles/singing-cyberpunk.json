@@ -7,7 +7,8 @@
     "release_ms": "held notes let go slowly",
     "viseme_strength": "sung vowels dominate; consonants are lighter",
     "symmetric": "motion capture is a little lopsided",
-    "upper_face": "voice-driven blinks, brows, squints, gaze and head (see docs/PROFILES.md)"
+    "upper_face": "voice-driven blinks, brows, squints, gaze and head (see docs/PROFILES.md)",
+    "closure_peak": "the strongest a p/b/m press gets (other lip shapes give way under it)"
   },
   "jaw_mean": {
     "-60": 0.03,
@@ -109,5 +110,6 @@
     "head_nod_deg": 2.5,
     "head_nods_per_minute": 20,
     "head_sway_deg": 1.5
-  }
+  },
+  "closure_peak": 0.95
 }

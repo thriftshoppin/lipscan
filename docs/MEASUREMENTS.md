@@ -100,6 +100,54 @@ Measured with `analyze/game_upper_face.py` on 27 speech clips (102 s), and on th
 - **Brow raises:** rare and small (mean 0.08).
 - **Gaze:** the eyes rest further down (mean 0.27).
 
+## Closures, moods and the neck (0.2.1)
+
+**p/b/m closures, speech, 41 game closures in 26 lines.**
+
+| | Game | 0.2.0 | 0.2.1 |
+|---|---|---|---|
+| Width at half height | 133 ms | 167 ms | 133 ms |
+| Peak | 1.05 | 1.0 | 0.95 (capped) |
+| Hit within ±3 frames | | 49% | 51% |
+| Hit within ±8 frames | | 76% | 78% |
+| False closures (none in the game nearby) | | 22% | 19% |
+| Median timing (model − game) | | +1 frame | +1 frame |
+| Pressed during pauses (share of quiet frames) | | 7.3% | 1.4% |
+
+The other shapes held up or improved:
+- **Lower lip tucked (f/v):** 67% / 81% hits within ±3 / ±8 frames
+- **Purse:** 45% / 61%
+- **Jaw correlation:** 0.79
+- **Tongue during pauses:** down from 16% to 3.5%
+
+The chin bunching seen during a press with the jaw open is how the rig looks; the game's own presses do the same.
+
+**Moods.** The game holds a line's mood in constant track values. This character's lines fall into two groups:
+
+| Mood | Lines | What's held |
+|---|---|---|
+| Scowl | 7 | brows lower and lateral 0.32; squints 0.30 / 0.30 / 0.22; nose sneer 0.28 left / 0.11 right; mouth corners down 0.20 |
+| Default | 20 | the same squints; brows raised 0.10; mouth corners up 0.10 |
+
+Scowling lines were about 3.8 semitones higher, 2 dB louder and a little flatter in pitch.
+
+| Upper-face error (mean absolute, 9 tracks, vs the game) | |
+|---|---|
+| No mood | 0.147 |
+| Mood set by hand to the game's | **0.045** |
+| `--mood auto` (right for 89% of lines; tuned on these lines) | 0.059 |
+| Always `warm` | 0.077 |
+
+Correlations don't change with a mood: a held level doesn't change a curve's shape. The mood fixes how the face sits, and the accents still carry the timing.
+
+**Neck.** The game moves throat and neck tracks during speech, but they don't follow the jaw (r ≈ 0), loudness or pitch. They sit at steady levels:
+- throat open: 0.14
+- Adam's apple down: 0.14
+- neck tighten: 0.09
+- platysma: 0.04
+
+The model holds them there while someone talks.
+
 ## How well the voice-driven upper face matches
 
 Same clips; the model hears only the audio. "Hit" = a model blink starting within 0.3 s of the game's. "By chance" is what blinks at the same rate, placed at random, would score.

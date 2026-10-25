@@ -88,6 +88,10 @@
     <div class="row"><label><input type="checkbox" id="showBrows" checked> Eyebrows</label><label><input type="checkbox" id="showEyes" checked> Eyes</label><label><input type="checkbox" id="showTeeth" checked> Teeth</label></div>
     <div class="row"><label><input type="checkbox" id="wire"> Wireframe</label><label><input type="checkbox" id="frontCam"> Front camera</label></div>
     <div class="row"><label title="Head turns from a LipScan .json (video traces and the voice model)"><input type="checkbox" id="headMotion" checked> Head motion</label><label><input type="checkbox" id="showVideo" checked> Video</label></div>
+    <h2>Mood</h2>
+    <div class="row"><select id="mood" title="A held expression added to LipScan clips (game clips carry their own)" style="max-width:100%"></select></div>
+    <div class="row"><label><input type="checkbox" id="moodA"> A</label><label><input type="checkbox" id="moodB" checked> B</label><input id="fMood" type="file" accept=".json" hidden></div>
+    <div id="moodInfo" style="color:var(--muted);font-size:11.5px"></div>
     <h2>Audio</h2>
     <div class="row">Offset <input type="number" id="offset" value="0" step="10"> ms</div>
     <h2>Try a pose</h2>

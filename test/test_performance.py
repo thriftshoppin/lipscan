@@ -161,5 +161,48 @@ with tempfile.TemporaryDirectory() as tmp:
     old.pop("upper_face")
     check("model: a profile without upper_face still works (mouth only)", "eye_l_brows_raise_in" not in lipsync.simulate_lipsync(wav, profile=old)["tracks"])
 
+# ---- 0.2.1: closures, pauses, brows under blinks, moods, neck ----
+with tempfile.TemporaryDirectory() as tmp:
+    wav = os.path.join(tmp, "voice.wav")
+    # "maybe", pause, "bob ate", with a 0.7 s pause between the phrases
+    fake_voice(wav, syllables=((0.3, 0.25), (0.6, 0.25), (1.6, 0.25), (1.9, 0.3)), length=2.6)
+    r = lipsync.simulate_lipsync(wav, text="maybe. bob ate", profile="speech", seed=2)
+    tr = r["tracks"]
+    shut = tr.get("lips_together_up", [])
+    peaks = [i for i in range(1, len(shut) - 1) if shut[i] > 0.4 and shut[i] >= shut[i - 1] and shut[i] > shut[i + 1]]
+    widths = []
+    for p in peaks:
+        a = b = p
+        while a > 0 and shut[a - 1] > shut[p] / 2:
+            a -= 1
+        while b < len(shut) - 1 and shut[b + 1] > shut[p] / 2:
+            b += 1
+        widths.append(b - a + 1)
+    check("closures: p/b/m presses are short peaks like the game's (<= 6 frames at half height)", peaks and max(widths) <= 6, f"widths {widths}")
+    cap = lipsync.load_profile("speech").get("closure_peak", 1.0)
+    check("closures: capped at the profile's closure_peak", max(shut) <= cap + 1e-6, f"max {max(shut):.2f}, cap {cap}")
+    pause = range(int(1.0 * 30), int(1.45 * 30))
+    check("pauses: no press (or any lip shape) in the middle of a pause",
+          max(max(tr[k][f] for f in pause) for k in tr if k.startswith("lips_")) < 0.05)
+    under = [p for p in tr.get("lips_l_purse", [0] * len(shut))]
+    check("closures: other lip shapes give way under a press", all(u < 0.2 for u, s in zip(under, shut) if s > 0.9))
+    bl = tr["eye_l_blink"]
+    raised = tr.get("eye_l_brows_raise_in", [0.0] * len(bl))
+    check("brows: no brow raise while the eyes are shut (as in the game)", all(rv < 0.05 for rv, b in zip(raised, bl) if b > 0.8))
+    talk = [f for f in range(len(bl)) if 0.4 * 30 <= f <= 0.75 * 30]
+    check("neck: throat tracks are active while talking and rest in silence",
+          max(tr["neck_throat_open"][f] for f in talk) > 0.1 and max(tr["neck_throat_open"][f] for f in range(int(1.25 * 30), int(1.45 * 30))) < 0.04)
+
+    scowl = lipsync.simulate_lipsync(wav, text="maybe. bob ate", profile="speech", seed=2, mood="scowl")
+    st = scowl["tracks"]
+    check("mood: scowl holds the brows down for the whole line, accents ride on top",
+          min(st["eye_l_brows_lower"]) >= 0.31 and max(st["eye_l_brows_lower"]) >= max(tr.get("eye_l_brows_lower", [0])), f"{min(st['eye_l_brows_lower']):.2f}")
+    check("mood: the result says which mood was used", scowl.get("mood", {}).get("name") == "scowl")
+    auto = lipsync.simulate_lipsync(wav, profile="speech", mood="auto")
+    check("mood: auto picks a preset and is labelled a guess", auto["mood"]["name"] in lipsync.mood_names() and auto["mood"].get("auto") is True,
+          f"{auto['mood']}")
+    custom = lipsync.simulate_lipsync(wav, profile="speech", mood={"name": "mine", "tracks": {"eye_l_widen": 0.5}})
+    check("mood: a custom preset works", min(custom["tracks"]["eye_l_widen"]) >= 0.5)
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

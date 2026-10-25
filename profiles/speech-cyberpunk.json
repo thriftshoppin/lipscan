@@ -18,7 +18,10 @@
     "viseme_strength": "scales all diction shapes",
     "shape_lead_ms": "diction shapes run this far ahead of the sound",
     "symmetric": "true = left and right always match (game dialogue does)",
-    "upper_face": "voice-driven blinks, brows, squints, gaze and head (see docs/PROFILES.md)"
+    "upper_face": "voice-driven blinks, brows, squints, gaze and head (see docs/PROFILES.md)",
+    "closure_peak": "the strongest a p/b/m press gets (other lip shapes give way under it)",
+    "mood_auto": "--mood auto: a guess from the voice. score = (pitch - pitch_ref)/pitch_scale + (loudness - loud_ref)/loud_scale - (pitch range - range_ref)/range_scale; above threshold -> intense, else calm",
+    "neck_during_speech": "neck/throat tracks held at the game's average level while talking (they don't follow jaw, loudness or pitch in the game data)"
   },
   "jaw_mean": {
     "-60": 0.03,
@@ -107,5 +110,28 @@
     "head_nod_deg": 1.5,
     "head_nods_per_minute": 12,
     "head_sway_deg": 0.8
+  },
+  "closure_peak": 0.95,
+  "mood_auto": {
+    "pitch_ref": 5.4,
+    "pitch_scale": 4.0,
+    "loud_ref": -28.0,
+    "loud_scale": 2.0,
+    "range_ref": 4.1,
+    "range_scale": 2.0,
+    "threshold": 0.5,
+    "intense": "scowl",
+    "calm": "warm"
+  },
+  "neck_during_speech": {
+    "neck_throat_open": 0.14,
+    "neck_throat_adamsApple_dn": 0.14,
+    "neck_tighten": 0.09,
+    "neck_throat_compress": 0.03,
+    "neck_throat_adamsApple_up": 0.02,
+    "neck_l_platysma_flex": 0.04,
+    "neck_l_sternocleidomastoid_flex": 0.01,
+    "neck_r_platysma_flex": 0.04,
+    "neck_r_sternocleidomastoid_flex": 0.01
   }
 }

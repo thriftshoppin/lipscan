@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.2.1 (2026-10-24)
+
+Polish from a frame-by-frame review against the game.
+
+- **Lip closures (p/b/m):**
+  - **Shape:** they're now short, sharp peaks like the game's (133 ms at half height, as measured), not 170 ms plateaus.
+  - **Strength:** capped by the profile's new `closure_peak` (0.95). Purse, funnel and the other lip shapes give way under a press instead of stacking on it.
+- **Placement:**
+  - Consonants now sit right next to their vowel, inside the sound. Before, a word's first consonant after a pause was spread back into the silence; that's why the "p" of "prove" pressed through a pause and landed late.
+  - No mouth shape plays whose sound falls in a pause.
+  - Presses during pauses: 7.3% of quiet frames → 1.4%.
+  - Tongue shapes during pauses: 16% → 3.5%.
+- **Brows and blinks:** the model no longer raises the brows while the eyes are shut, as the game does. In the viewer, eyebrows get a small depth bias, so skin no longer pokes through them during blinks.
+- **Moods (new):** `--mood neutral|scowl|warm|sad|surprised|<preset.json>|auto` holds an expression for the whole line, and the voice-driven accents ride on top.
+  - **Measured presets:** `scowl` and `warm` are the median held levels of the game character's two kinds of dialogue lines.
+  - **Hand-made presets:** `sad` and `surprised`, labelled as such.
+  - **`auto`:** a labelled guess from pitch, loudness and pitch range. It picked the game's mood for 89% of the lines it was tuned on.
+  - **Effect:** with the right mood, the upper face's average error against the game drops from 0.147 to 0.045.
+  - **Presets:** live in `profiles/moods/`.
+- **Viewer:** a **Mood** menu applies a preset to LipScan clips (A and/or B), or loads a custom preset JSON. Also the `mood=` address parameter.
+- **Neck:** throat and neck tracks are held at the game's average levels while someone talks (profile `neck_during_speech`). In the game data they don't follow jaw, loudness or pitch.
+- **Fix:** `game_upper_face.py` now reads held (constant) track values. That's where the game stores a line's mood.
+- **Tests:** `test_performance.py` adds 10 checks, 36 in all:
+  - closure shape and cap
+  - no lip shapes in pauses
+  - lip shapes giving way under a press
+  - no brow raise during blinks
+  - neck at rest in silence
+  - mood presets, auto and custom
+
 ## 0.2.0 (2026-10-24)
 
 The whole face, not just the mouth.

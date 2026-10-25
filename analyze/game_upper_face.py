@@ -62,6 +62,9 @@ def clips(glb, names):
         for i, ks in per.items():
             ks.sort()
             out[names[i]] = np.interp(grid, [t for t, _ in ks], [v for _, v in ks])
+        for k in ex.get("constTrackKeys", []):          # held values (the game keeps a line's mood here)
+            if names[k["trackIndex"]] not in out:
+                out[names[k["trackIndex"]]] = np.full(frames, float(k["value"]))
         yield a.get("name", ""), out, frames
 
 
@@ -82,12 +85,26 @@ def get(c, name, n):
     return v
 
 
-def run(data, profile, quiet=False):
+UPPER = ["eye_l_brows_lower", "eye_l_brows_lateral", "eye_l_brows_raise_in", "eye_l_oculi_squint_inner",
+         "eye_l_oculi_squint_outer_upper", "eye_l_oculi_squint_outer_lower", "nose_l_snear", "lips_l_corner_up", "lips_l_corner_dn"]
+
+
+def game_mood(c, n):
+    """The mood the game holds in a clip (its base tracks): scowl when the brows are held down, else warm."""
+    return "scowl" if float(np.median(c.get("eye_l_brows_lower", np.zeros(n)))) > 0.2 else "warm"
+
+
+def run(data, profile, quiet=False, mood=None):
+    """mood: None, a preset name, "auto", or "game" (the mood the game holds in each clip, set by hand)."""
     rows = []
     for name, c, n, wav, db in data:
-        res = lipsync.simulate_lipsync(wav, profile=profile)
+        want = game_mood(c, n) if mood == "game" else mood
+        res = lipsync.simulate_lipsync(wav, profile=profile, mood=want)
         m = lambda k: np.pad(np.array(res["tracks"].get(k, [0.0] * n), dtype=float), (0, n))[:n]
-        r = {"clip": name, "seconds": round(n / FPS, 2)}
+        r = {"clip": name, "seconds": round(n / FPS, 2), "mood": (res.get("mood") or {}).get("name"), "game_mood": game_mood(c, n)}
+        # how far the whole upper face sits from the game's (base + lipsync layer), mean absolute error
+        full = lambda k: c.get(k, np.zeros(n)) + c.get(k + LAYER, np.zeros(n))
+        r["upper_mae"] = float(np.mean([np.mean(np.abs(m(k) - full(k))) for k in UPPER]))
         r["jaw"] = corr(m("jaw_mid_open"), get(c, "jaw_mid_open", n))
         g_raise, g_lower, g_blink = get(c, "eye_l_brows_raise_in", n), get(c, "eye_l_brows_lower", n), get(c, "eye_l_blink", n)
         r["game_raise"] = float(g_raise.max())
@@ -115,6 +132,8 @@ def run(data, profile, quiet=False):
         "blink_hit_rate_by_chance": round(1 - math.exp(-rate * 0.6), 3),
         "blinks_per_minute": {"game": round(gb / seconds * 60, 1), "model": round(rate * 60, 1)},
         "head_rms_deg": {"model": round(float(np.mean([r["head_rms_deg"] for r in rows])), 2), "game": None},
+        "upper_face_mae": round(float(np.mean([r["upper_mae"] for r in rows])), 3),
+        "mood_right": round(float(np.mean([r["mood"] == r["game_mood"] for r in rows])), 2) if mood else None,
     }
     return summary, rows
 
@@ -189,6 +208,9 @@ def main():
     cfg = lipsync.load_profile(a.profile)
     summary, rows = run(data, cfg)
     print("Model:", json.dumps(summary))
+    for md in ("game", "auto", "scowl", "warm"):
+        s, _ = run(data, cfg, mood=md)
+        print(f"Model, mood={md}:", json.dumps({k: s[k] for k in ("brow_corr", "frown_corr", "upper_face_mae", "mood_right", "blink_hit_rate")}))
     best = None
     if a.fit and cfg.get("upper_face"):
         grid = {"brow_raises_per_minute": [8, 12, 16], "brow_raise_threshold": [0.6, 0.8], "brow_lead_ms": [0, 100, 200],

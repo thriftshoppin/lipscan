@@ -1,0 +1,14 @@
+{
+  "format": "lipscan-mood/1",
+  "name": "surprised",
+  "about": "Brows up, eyes wide.",
+  "source": "hand-made (not measured; no surprised lines in the data)",
+  "tracks": {
+    "eye_l_brows_raise_in": 0.5,
+    "eye_r_brows_raise_in": 0.5,
+    "eye_l_brows_raise_out": 0.5,
+    "eye_r_brows_raise_out": 0.5,
+    "eye_l_widen": 0.4,
+    "eye_r_widen": 0.4
+  }
+}

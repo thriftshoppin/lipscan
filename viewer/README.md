@@ -49,6 +49,7 @@ The pack is a folder with `character.json` plus the head, eyebrows, eyes and tee
 - **Compare:** A and B side by side.
 - **Try a pose:** test any face track.
 - **Head motion:** switch it on or off. It comes from LipScan curve files; the game's face clips have no head turns.
+- **Mood:** a held expression (neutral, scowl, warm, sad, surprised, or a custom preset JSON) added to LipScan clips in A and/or B. The game's clips carry their own mood.
 - **Video pane:** shows the source frames in sync when a trace folder is loaded.
 
 **From a URL.** When served over http (`node serve.mjs`, with `LIPSCAN_PACKS` and `LIPSCAN_DATA` set; this computer only), files can be given in the address:

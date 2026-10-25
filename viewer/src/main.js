@@ -4,6 +4,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { FaceSolver } from "./solver.js";
 import { loadAnimation } from "./anims.js";
+import { MOODS } from "./moods.js";
 
 const $ = (id) => document.getElementById(id);
 const FPS = 30;
@@ -39,7 +40,9 @@ new ResizeObserver(resize).observe(view);
 
 const MATERIALS = {
   head: () => new THREE.MeshStandardMaterial({ color: 0xc9b8aa, roughness: 0.62 }),
-  eyebrows: () => new THREE.MeshStandardMaterial({ color: 0x3a2f28, roughness: 0.9, transparent: true, opacity: 0.85 }),
+  // eyebrow cards sit a hair above the skin; the depth bias keeps skin from poking through when lids and brows move
+  eyebrows: () => new THREE.MeshStandardMaterial({ color: 0x3a2f28, roughness: 0.9, transparent: true, opacity: 0.85,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -60 }),
   eyes: () => new THREE.MeshStandardMaterial({ color: 0xe9e6e0, roughness: 0.25 }),
   teeth: () => new THREE.MeshStandardMaterial({ color: 0xeee6d2, roughness: 0.4 }),
   other: () => new THREE.MeshStandardMaterial({ color: 0x8c8580, roughness: 0.7 }),
@@ -222,7 +225,47 @@ function sampleValues(slot, t, out) {
       for (let i = 0; i < ref.length && i < out.length; i++) out[i] += ref[i];
     }
   }
+  applyMood(slot, out);
   if (state.tryTrack >= 0 && state.tryValue > 0) out[state.tryTrack] = Math.max(out[state.tryTrack], state.tryValue); // pose tester
+}
+
+// ---------------- mood ----------------
+// A held expression added on top of LipScan clips (the voice-driven accents ride on it). Game clips already hold
+// their own mood, so they're left alone. Like the game, raised brows give way while the eyes blink.
+const moods = { ...MOODS };
+let moodPreset = null;
+function setMood(name) {
+  moodPreset = name && moods[name] && Object.keys(moods[name].tracks).length ? moods[name] : null;
+  const sel = $("mood");
+  if (sel.value !== name) sel.value = name;
+  $("moodInfo").textContent = moods[name] ? `${moods[name].about} (${moods[name].source})` : "";
+  for (const s of ["A", "B"]) computeCurve(s);
+  render();
+}
+function fillMoods() {
+  const sel = $("mood");
+  sel.innerHTML = "";
+  for (const name of Object.keys(moods)) sel.add(new Option(name, name));
+  sel.add(new Option("Custom preset…", "__custom"));
+  sel.value = moodPreset ? moodPreset.name : "neutral";
+}
+function applyMood(slot, out) {
+  const clip = state.clip[slot];
+  if (!moodPreset || !clip || clip.kind !== "lipscan" || !$(`mood${slot}`).checked || !state.solver) return;
+  const idx = state.solver.trackIndex;
+  for (const [name, level] of Object.entries(moodPreset.tracks)) {
+    const i = idx.get(name);
+    if (i !== undefined) out[i] = Math.min(1, out[i] + level);
+  }
+  for (const side of ["l", "r"]) {
+    const b = idx.get(`eye_${side}_blink`);
+    const bl = b === undefined ? 0 : Math.max(out[b], out[idx.get(`eye_${side}_blinkLipsyncPoseOutput`) ?? b]);
+    if (bl <= 0) continue;
+    for (const k of [`eye_${side}_brows_raise_in`, `eye_${side}_brows_raise_out`]) {
+      const i = idx.get(k);
+      if (i !== undefined) out[i] *= 1 - Math.min(1, bl / 0.85);
+    }
+  }
 }
 
 // Head angles for a slot at time t (LipScan .json with "head"), unless Head motion is off
@@ -450,6 +493,24 @@ $("fB").addEventListener("change", (e) => e.target.files[0] && loadAnim("B", e.t
 $("fAudio").addEventListener("change", (e) => e.target.files[0] && loadAudio(e.target.files[0]));
 $("fVideo").addEventListener("change", (e) => loadVideoFolder([...e.target.files]).catch(report));
 $("headMotion").addEventListener("change", () => render());
+fillMoods();
+$("mood").addEventListener("change", (e) => {
+  if (e.target.value === "__custom") { $("fMood").click(); return; }
+  setMood(e.target.value);
+});
+$("fMood").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) { fillMoods(); return; }
+  try {
+    const j = JSON.parse(await f.text());
+    if (!j.tracks || typeof j.tracks !== "object") throw new Error(`${f.name} isn't a mood preset (needs "tracks").`);
+    const name = j.name || f.name.replace(/\.json$/i, "");
+    moods[name] = { about: j.about || "custom preset", source: f.name, tracks: j.tracks };
+    fillMoods();
+    setMood(name);
+  } catch (err) { report(err); fillMoods(); }
+});
+for (const s of ["A", "B"]) $(`mood${s}`).addEventListener("change", () => { computeCurve(s); render(); });
 $("showVideo").addEventListener("change", () => { $("videoPane").hidden = !state.video || !$("showVideo").checked; shownFrame = -1; showFrame(); });
 $("clipA").addEventListener("change", (e) => selectClip("A", +e.target.value));
 $("clipB").addEventListener("change", (e) => selectClip("B", +e.target.value));
@@ -540,7 +601,7 @@ function useClip(slot, want) {
 }
 
 // When served over http, files can be given in the address:
-//   ?pack=folder/&a=file&b=file&audio=file&video=trace-folder/&clip=name&clipB=name&view=ab&t=seconds&head=0&cam=front
+//   ?pack=folder/&a=file&b=file&audio=file&video=trace-folder/&clip=name&clipB=name&view=ab&t=seconds&head=0&cam=front&mood=scowl
 //   clip (or clipA) picks A's clip, clipB picks B's: a bare id, the full name or the list label. view: a, b or ab.
 async function fromUrl() {
   const q = new URLSearchParams(location.search);
@@ -561,6 +622,7 @@ async function fromUrl() {
     await loadVideo(JSON.parse(trace), (file) => vb + file.split("/").map(encodeURIComponent).join("/"), decodeURIComponent(vb.split("/").filter(Boolean).pop()));
   }
   if (q.get("head") === "0") $("headMotion").checked = false;
+  if (q.get("mood") && moods[q.get("mood")]) setMood(q.get("mood"));
   const view = (q.get("view") || (state.clip.B ? "ab" : "")).toUpperCase();
   if (["A", "B", "AB"].includes(view)) { $("viewMode").value = view; layout(); }
   if (q.get("cam") === "front") { $("frontCam").checked = true; $("frontCam").dispatchEvent(new Event("change")); }

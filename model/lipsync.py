@@ -88,10 +88,11 @@ VISEMES = {
     "H":   {},
 }
 VOWELS = {"OO", "O", "EE", "EH", "AA", "UH"}
+CONS_FRAMES = 3   # about how long one consonant lasts (frames at 30 fps)
 
 # Shortest time (frames at 30 fps) a shape is held, so it reads on screen.
-# The game holds a p/b/m closure for about 4-6 frames.
-MIN_HOLD = {"BMP": 5, "FV": 4, "OO": 4, "W": 4, "CH": 4, "TD": 3, "L": 4, "TH": 3, "S": 3, "K": 3, "R": 3}
+# The game's p/b/m closure is a sharp peak, about 4 frames (130 ms) wide at half height.
+MIN_HOLD = {"BMP": 4, "FV": 4, "OO": 4, "W": 4, "CH": 4, "TD": 3, "L": 4, "TH": 3, "S": 3, "K": 3, "R": 3}
 
 # Spelling -> viseme, longest match first. Rough English rules; swap in a
 # pronouncing dictionary later if you want exact phonemes.
@@ -295,19 +296,38 @@ def place_visemes(visemes, db, fps=FPS, voiced_db=-45):
     else:                                                  # not enough peaks: spread evenly over the sound
         centres = [voiced[min(len(voiced) - 1, int((k + 0.5) / len(syl) * len(voiced)))] for k in range(len(syl))]
     bounds = [voiced[0]] + [(a + b) // 2 for a, b in zip(centres, centres[1:])] + [voiced[-1] + 1]
+    is_voiced = [d > voiced_db for d in db]
+
+    def sound_start(lo, c):
+        """First voiced frame of the run that leads into the peak at c (so a consonant after a pause sits where
+        the sound starts, not back in the silence)."""
+        f = c
+        while f > lo and is_voiced[f - 1]:
+            f -= 1
+        return f
+
+    def sound_end(c, hi):
+        f = c
+        while f < hi - 1 and is_voiced[f + 1]:
+            f += 1
+        return f
+
     placed = []
     for (onset, vowel, coda, _), c, lo, hi in zip(syl, centres, bounds, bounds[1:]):
-        # onset consonants fill the dip before the peak, coda the dip after it
+        # onset consonants sit just before the vowel (about CONS_FRAMES each), coda consonants just after it,
+        # both inside the sound around this syllable
         on_end = max(lo, c - 2)
+        on_start = max(lo, min(on_end - 1, sound_start(lo, c) - 1), on_end - CONS_FRAMES * len(onset))
         for k, (vis, _) in enumerate(onset):
-            a = lo + (on_end - lo) * k // max(1, len(onset))
-            b = lo + (on_end - lo) * (k + 1) // max(1, len(onset))
+            a = on_start + (on_end - on_start) * k // max(1, len(onset))
+            b = on_start + (on_end - on_start) * (k + 1) // max(1, len(onset))
             placed.append((vis, a, max(a, b - 1)))
         cd_start = min(hi - 1, c + 2)
+        cd_end = min(hi, max(cd_start + 1, sound_end(c, hi) + 2), cd_start + CONS_FRAMES * len(coda))
         placed.append((vowel[0], on_end, cd_start))
         for k, (vis, _) in enumerate(coda):
-            a = cd_start + (hi - cd_start) * k // max(1, len(coda))
-            b = cd_start + (hi - cd_start) * (k + 1) // max(1, len(coda))
+            a = cd_start + (cd_end - cd_start) * k // max(1, len(coda))
+            b = cd_start + (cd_end - cd_start) * (k + 1) // max(1, len(coda))
             placed.append((vis, a, max(a, b - 1)))
     return placed
 
@@ -328,12 +348,20 @@ def place_timed_words(words, db, fps=FPS, voiced_db=-45, longest=1.0):
     return placed
 
 
-def diction_tracks(placed, n, cfg, fps=FPS):
-    """Each shape ramps in, holds, ramps out, a little ahead of the sound."""
+CLOSURE = ("lips_together_up", "lips_together_dn")
+
+
+def diction_tracks(placed, n, cfg, fps=FPS, quiet=None):
+    """Each shape ramps in, holds, ramps out, a little ahead of the sound. A p/b/m closure is a short peak, capped
+    at the profile's closure_peak, and other lip shapes give way under it. quiet[f] = True in pauses: no shape whose sound
+    falls in a pause."""
     tracks, jaw_scale = {}, [1.0] * n
     lead = round(cfg["shape_lead_ms"] * fps / 1000)
     for vis, start, end in placed:
         shape = VISEMES[vis]
+        if vis == "BMP" and end - start > 1:                  # a press is a peak, not a plateau
+            mid = (start + end + 1) // 2
+            start, end = mid - 1, mid
         short = MIN_HOLD.get(vis, 3) - (end - start + 1)     # too brief to read on screen: widen around its centre
         if short > 0:
             start, end = start - short // 2, end + short - short // 2
@@ -344,8 +372,23 @@ def diction_tracks(placed, n, cfg, fps=FPS):
                 else:
                     t = tracks.setdefault(name, [0.0] * n)
                     t[f] = max(t[f], value * cfg["viseme_strength"])
+    if quiet:
+        for t in tracks.values():
+            for f in range(n):
+                if quiet[min(n - 1, f + lead)]:          # the shape runs `lead` frames ahead of its sound
+                    t[f] = 0.0
     quick = dict(cfg, attack_ms=cfg["shape_attack_ms"], release_ms=cfg["shape_release_ms"], max_open_speed=99, max_close_speed=99)
-    return {k: smooth(v, quick, fps) for k, v in tracks.items()}, smooth(jaw_scale, quick, fps)
+    out = {k: smooth(v, quick, fps) for k, v in tracks.items()}
+    cap = cfg.get("closure_peak", 1.0)
+    if any(k in out for k in CLOSURE):
+        press = [max(out.get(k, [0.0] * n)[f] for k in CLOSURE) for f in range(n)]
+        for k in CLOSURE:
+            if k in out:
+                out[k] = [min(cap, v) for v in out[k]]
+        for k, v in out.items():
+            if k.startswith("lips_") and k not in CLOSURE:
+                out[k] = [x * (1 - min(1.0, p)) for x, p in zip(v, press)]
+    return out, smooth(jaw_scale, quick, fps)
 
 
 # ----------------------------------------------------------------------------
@@ -513,6 +556,12 @@ def upper_face(db, samples, rate, cfg, seed, fps=FPS):
                 if 0 <= c - 2 + k < n:
                     blink[c - 2 + k] = max(blink[c - 2 + k], v)
         tracks["eye_l_blink"] = tracks["eye_r_blink"] = blink
+        # like the game, the brows don't raise during a blink (raised brows over shut lids also push the skin
+        # through the eyebrow cards)
+        for side in "lr":
+            for name in (f"eye_{side}_brows_raise_in", f"eye_{side}_brows_raise_out"):
+                if name in tracks:
+                    tracks[name] = [r * (1 - min(1.0, b / max(1e-6, u["blink_peak"]))) for r, b in zip(tracks[name], blink)]
 
     # Gaze: the game's dialogue eyes rest slightly downward
     if u.get("gaze_down"):
@@ -538,12 +587,65 @@ def upper_face(db, samples, rate, cfg, seed, fps=FPS):
 
 
 # ----------------------------------------------------------------------------
+# Mood: a held expression for the whole line, with the voice-driven accents on top
+# ----------------------------------------------------------------------------
+MOOD_DIR = os.path.join(PROFILE_DIR, "moods")
+
+
+def mood_names():
+    return sorted(f[:-5] for f in os.listdir(MOOD_DIR) if f.endswith(".json")) if os.path.isdir(MOOD_DIR) else []
+
+
+def load_mood(mood):
+    """A mood preset by name (profiles/moods/<name>.json), a path to one, or a dict {"tracks": {track: level}}."""
+    if isinstance(mood, dict):
+        return mood
+    path = mood if mood.endswith(".json") and os.path.exists(mood) else os.path.join(MOOD_DIR, f"{mood}.json")
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def estimate_mood(db, samples, rate, cfg, fps=FPS):
+    """A GUESS at the mood from the voice alone: a higher, louder, flatter delivery than the profile's reference
+    reads as intense (the profile's "intense" mood), anything else as its "calm" mood. Returns (name, score)."""
+    m = cfg.get("mood_auto")
+    if not m:
+        return "neutral", 0.0
+    n = len(db)
+    voiced_db = cfg["normalize_to_db"] - 30
+    heard = sorted(p for p in pitch_track(samples, rate, n, fps) if p is not None)
+    raw_db = loudness_db(samples, rate, fps)
+    loud = [d for d, v in zip(raw_db, db) if v > voiced_db]
+    if len(heard) < 5 or not loud:
+        return m["calm"], 0.0
+    med = heard[len(heard) // 2]
+    iqr = heard[3 * len(heard) // 4] - heard[len(heard) // 4]
+    score = (med - m["pitch_ref"]) / m["pitch_scale"] + (sum(loud) / len(loud) - m["loud_ref"]) / m["loud_scale"] \
+        - (iqr - m["range_ref"]) / m["range_scale"]
+    return (m["intense"] if score > m["threshold"] else m["calm"]), round(score, 2)
+
+
+def apply_mood(tracks, preset, n, blink_peak=0.85):
+    """Hold the preset's levels for the whole line; the accents already in `tracks` ride on top."""
+    for name, level in preset.get("tracks", {}).items():
+        base = tracks.get(name, [0.0] * n)
+        tracks[name] = [min(1.0, level + v) for v in base]
+    blink = tracks.get("eye_l_blink")
+    if blink:                                            # brows still give way during blinks
+        for name in [k for k in tracks if "brows_raise" in k]:
+            tracks[name] = [r * (1 - min(1.0, b / blink_peak)) for r, b in zip(tracks[name], blink)]
+    return tracks
+
+
+# ----------------------------------------------------------------------------
 # Main entry point
 # ----------------------------------------------------------------------------
-def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None):
+def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, mood=None):
     """Returns {"fps", "profile", "duration", "tracks": {name: [value per frame]}}.
     profile: a name, alias ("speech", "singing"), path, or an already loaded profile dict.
-    words: optional [(start seconds, word), ...]; used instead of text when given."""
+    words: optional [(start seconds, word), ...]; used instead of text when given.
+    mood: None, a preset name (neutral, scowl, warm, sad, surprised), a preset path or dict, or "auto" (a guess
+    from the voice)."""
     cfg = profile if isinstance(profile, dict) else load_profile(profile)
     samples, rate = load_wav(wav_path)
     db = normalize(loudness_db(samples, rate), cfg["normalize_to_db"])
@@ -552,7 +654,10 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None):
     tracks = {}
     if words or text:
         placed = place_timed_words(words, db) if words else place_visemes(text_to_visemes(text), db)
-        tracks, jaw_scale = diction_tracks(placed, n, cfg)
+        # a pause: more than 2 frames from any sound
+        loud = [d > cfg["normalize_to_db"] - 30 for d in db]
+        quiet = [not any(loud[max(0, f - 2):f + 3]) for f in range(n)]
+        tracks, jaw_scale = diction_tracks(placed, n, cfg, quiet=quiet)
         jaw = [min(1.0, j * s) for j, s in zip(jaw, jaw_scale)]
     tracks["jaw_mid_open"] = jaw
     for name, gain in cfg["follow_jaw"].items():
@@ -576,10 +681,31 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None):
                     blink[f + k] = v
             f += int(rnd.expovariate(cfg["blinks_per_minute"] / 60) * FPS) + 6
         tracks["eye_l_blink"] = tracks["eye_r_blink"] = blink
+    # Neck: the game's throat and neck tracks don't follow the jaw, loudness or pitch (measured); they sit at a
+    # steady level while someone talks. Ease them in and out with the speech.
+    if cfg.get("neck_during_speech"):
+        talking = [1.0 if d > cfg["normalize_to_db"] - 30 else 0.0 for d in db]
+        env = smooth(talking, dict(cfg, attack_ms=150, release_ms=250, max_open_speed=99, max_close_speed=99))
+        for name, level in cfg["neck_during_speech"].items():
+            base = tracks.get(name, [0.0] * n)
+            tracks[name] = [max(b, level * e) for b, e in zip(base, env)]
+    mood_info = None
+    if mood:
+        guessed = mood == "auto"
+        score = None
+        if guessed:
+            mood, score = estimate_mood(db, samples, rate, cfg)
+        preset = load_mood(mood)
+        apply_mood(tracks, preset, n, (cfg.get("upper_face") or {}).get("blink_peak", 0.85))
+        mood_info = {"name": preset.get("name", "custom"), "source": preset.get("source", "custom")}
+        if guessed:
+            mood_info.update(auto=True, score=score, note="guessed from the voice; set --mood by hand when you know it")
     out = {"fps": FPS, "profile": cfg.get("name", "custom"), "duration": n / FPS,
            "tracks": {k: [round(v, 4) for v in vals] for k, vals in sorted(tracks.items())}}
     if head:
         out["head"] = {k: [round(v, 2) for v in vals] for k, vals in head.items()}
+    if mood_info:
+        out["mood"] = mood_info
     return out
 
 
@@ -601,6 +727,7 @@ if __name__ == "__main__":
     ap.add_argument("--text", help="the words spoken or sung, for diction")
     ap.add_argument("--words", help='JSON file of timed words, [[seconds, "word"], ...]; overrides --text')
     ap.add_argument("--profile", default="speech", help=f"one of {', '.join(profile_names())}, speech, singing, or a .json path")
+    ap.add_argument("--mood", help=f"held expression: {', '.join(mood_names())}, a preset .json, or auto (a guess from the voice)")
     ap.add_argument("--export", choices=sorted(EXPORTERS), default="raw", help="track naming (default: raw rig names)")
     ap.add_argument("--out", help="write JSON here")
     ap.add_argument("--preview", action="store_true", help="print a bar chart")
@@ -609,7 +736,7 @@ if __name__ == "__main__":
     if a.words:
         with open(a.words, encoding="utf-8") as fh:
             words = [(float(t), str(w)) for t, w in json.load(fh)]
-    res = simulate_lipsync(a.wav, a.text, a.profile, words=words)
+    res = simulate_lipsync(a.wav, a.text, a.profile, words=words, mood=a.mood)
     if a.preview or not a.out:
         preview(res)
     res = EXPORTERS[a.export](res)

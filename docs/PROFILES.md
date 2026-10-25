@@ -18,7 +18,25 @@ A profile is a JSON file in `profiles/` that tells the model how a mouth moves. 
 | `viseme_strength` | Scales all diction shapes (p/b/m, f/v, oo/w, ...). |
 | `shape_lead_ms`, `shape_attack_ms`, `shape_release_ms` | Timing of the diction shapes. |
 | `symmetric` | `true` keeps left and right identical; `false` adds a slight drift, like motion capture. |
+| `closure_peak` | The strongest a p/b/m press gets (default 1.0). Other lip shapes give way under a press. |
+| `neck_during_speech` | Neck and throat tracks, and the level each is held at while someone talks. |
+| `mood_auto` | Settings for `--mood auto` (a guess): reference pitch, loudness and pitch range, the threshold, and which preset counts as `intense` and which as `calm`. |
 | `upper_face` | The voice-driven upper face (below). Leave it out for mouth only. |
+
+### Moods
+
+`--mood <name>` holds an expression for the whole line, and the voice-driven accents ride on top. Presets are in `profiles/moods/`:
+
+| Preset | Source |
+|---|---|
+| `neutral` | Nothing held. |
+| `scowl` | Measured: the median held levels over the game character's 7 scowling lines. |
+| `warm` | Measured: the median over their 20 other lines (their default delivery). |
+| `sad`, `surprised` | Hand-made, not measured. |
+
+A custom preset is a JSON file, `{"name": "...", "tracks": {"eye_l_brows_lower": 0.2, ...}}`. Pass its path to `--mood`, or load it in the viewer's Mood menu.
+
+`--mood auto` guesses from the voice: a higher, louder, flatter delivery reads as the profile's intense mood (scowl), anything else as its calm one (warm). It's a guess, and the result says so.
 
 ### `upper_face`
 
