@@ -10,7 +10,9 @@ This skill tells Claude how to build two things on the user's machine:
 1. **A converter.** It reads one character's head from the user's game, using the WolvenKit CLI, and writes a private "character pack".
 2. **A viewer.** One self-contained HTML file: open a character pack, open an animation, then play/pause and scrub a timeline. It can compare A and B side by side and has a pose tester.
 
-**Never ship or commit game-derived data.** That covers meshes, rigs, facial setups, animations, audio and character packs. The packs and the built viewer stay on the user's PC. Put them outside any git repository, or ignore them in git. This skill is the only thing that's shared: knowledge, not data.
+**Never ship or commit game-derived data.** That covers meshes, rigs, facial setups, animations, audio and character packs. The packs and the built viewer stay on the user's PC. Put them outside any git repository, or ignore them in git. Only knowledge and code are shared, never data.
+
+**A ready-made implementation is in the LipScan repo's `viewer/` folder** (converter, solver, app, build script). If the user has the repo, build from that: `npm install`, `node build.mjs`, then `build_character.py` for the pack. Use the rest of this file to understand it, check it or adapt it.
 
 ## Before you start
 

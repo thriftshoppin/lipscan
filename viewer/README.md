@@ -1,0 +1,73 @@
+# LipScan Viewer (Cyberpunk 2077 face)
+
+A small offline viewer that plays facial animation on a character's real Cyberpunk 2077 head. It uses a rebuilt copy of the game's face solver. It plays:
+
+- the game's own lipsync clips (WolvenKit `.anims` glTF exports)
+- LipScan curve files: the voice model's output, or a performance retargeted from video
+
+You can play one animation, or two side by side (A/B).
+
+**No game data is included.** You build a character pack from **your own** game install with `build_character.py`. Packs, exported animations, game audio and screenshots of game meshes are kept out of git by `.gitignore`. Please don't share them.
+
+## Build
+
+Needs Node.js 18+ and Python 3.8+.
+
+```
+cd viewer
+npm install
+node build.mjs            # -> dist/lipscan-viewer.html (one file, opens offline; double-click it)
+```
+
+On Windows, for an app-like window:
+
+```
+msedge.exe --app="file:///C:/path/to/viewer/dist/lipscan-viewer.html"
+```
+
+## Make a character pack from your game
+
+You need the [WolvenKit CLI](https://github.com/WolvenKit/WolvenKit/releases) (8.x) and the depot path of a head mesh (`...\h0_*.mesh`). To find head meshes:
+
+```
+WolvenKit.CLI archive <archive> -l -r "<name>.*h0_.*\.mesh$"
+```
+
+Then:
+
+```
+python build_character.py --wolvenkit "<path>\WolvenKit.CLI.exe" --game "<Cyberpunk 2077 folder>" ^
+    --head "<depot path of the h0_ .mesh>" --out "<somewhere outside this repo>\<name>"
+```
+
+The pack is a folder with `character.json` plus the head, eyebrows, eyes and teeth `.glb` files. It only reads the game archives; it never changes the game.
+
+## Use
+
+- **Load files:** with **Character…**, **Animation A…**, **Animation B…**, **Audio…** and **Video…** (a LipScan trace folder), or drag files and folders onto the window.
+- **Play:** Play/Pause with Space, step one frame with the arrow keys. Click or drag the timeline to seek.
+- **Compare:** A and B side by side.
+- **Try a pose:** test any face track.
+- **Head motion:** switch it on or off. It comes from LipScan curve files; the game's face clips have no head turns.
+- **Video pane:** shows the source frames in sync when a trace folder is loaded.
+
+**From a URL.** When served over http (`node serve.mjs`, with `LIPSCAN_PACKS` and `LIPSCAN_DATA` set; this computer only), files can be given in the address:
+
+```
+?pack=/pack/<name>/&a=/data/<anims.glb>&clip=<id>&b=/data/<lipscan.json>&audio=/data/<voice.wav>&video=/data/<trace>/&view=ab&cam=front
+```
+
+How it works (the solver, the file formats, head motion): see `../claude/skills/cyberpunk-face-viewer/SKILL.md` and `../docs/WOLVENKIT.md`.
+
+## Files
+
+| File | What it is |
+|---|---|
+| `build_character.py` | Converter: your game files → a private character pack. |
+| `src/solver.js` | Track values → bone deformations, rebuilt from the facial setup, plus head motion. |
+| `src/anims.js` | Loads WolvenKit `.anims` glTF exports and LipScan curve files. |
+| `src/main.js`, `src/index.html` | The app: scene, A/B view, timeline, pose tester, video pane, address parameters. |
+| `build.mjs` | Bundles everything with three.js (MIT) into one HTML file. |
+| `serve.mjs` | Optional local dev server (127.0.0.1 only). |
+
+MIT licensed, like the rest of LipScan. Not affiliated with CD PROJEKT RED. Cyberpunk 2077 is a trademark of CD PROJEKT S.A.

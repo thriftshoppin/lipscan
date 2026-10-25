@@ -65,7 +65,8 @@ Those rules became a model. To check them against real people rather than one ga
 | `export/` | Track naming for each target, and the editable MediaPipe-to-Cyberpunk mapping. |
 | `test/` | Self-tests and a terminal driver. |
 | `docs/` | History, WolvenKit guide, measurements, profiles, security. |
-| `claude/skills/cyberpunk-face-viewer/` | A Claude skill that builds a 3D face viewer **on your own PC from your own game files**: game clips and LipScan curves played on a character's real head, side by side. No game data or prebuilt viewer is shipped. |
+| `viewer/` | Source of the 3D face viewer: game clips and LipScan curves played on a Cyberpunk 2077 character's real head, side by side. You build the character from **your own** game files; no game data or prebuilt viewer is shipped. |
+| `claude/skills/cyberpunk-face-viewer/` | A Claude skill explaining the viewer and the game's face system, so Claude can build or adapt it. |
 
 ## Requirements
 
@@ -124,12 +125,17 @@ Those rules became a model. To check them against real people rather than one ga
 
 ## See it on a real head (Cyberpunk 2077)
 
-LipScan doesn't ship a viewer or any game data. Instead, `claude/skills/cyberpunk-face-viewer/SKILL.md` gives Claude everything it needs to build one locally from your own install:
+`viewer/` holds the viewer's source code. LipScan doesn't ship any game data, so you build the character from **your own** install. See [viewer/README.md](viewer/README.md).
 
-- **The converter:** reads a character's head, face skeleton and facial setup with WolvenKit.
-- **The viewer:** one offline HTML file with play/pause, a timeline, A/B comparison and a pose tester. It runs a rebuilt copy of the game's face solver.
+- **The converter** (`build_character.py`): reads a character's head, face skeleton and facial setup with WolvenKit, into a private character pack.
+- **The viewer:** one offline HTML file, built with `npm install` then `node build.mjs`. It runs a rebuilt copy of the game's face solver and has:
+  - play/pause and a timeline
+  - A/B comparison
+  - a pose tester
+  - head motion
+  - a source-video pane
 
-To use it, give the skill file to Claude Code (copy the folder into `.claude/skills/`, or just ask Claude to follow it).
+`claude/skills/cyberpunk-face-viewer/SKILL.md` explains how it all works, so Claude can build, check or adapt it for you.
 
 ## How well it works
 

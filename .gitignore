@@ -13,3 +13,11 @@ packs/
 *.rig
 *.facialsetup
 character.json
+node_modules/
+*.wav
+*.bnk
+*.archive
+screenshots/
+frames/
+performance.json
+retarget-*.json

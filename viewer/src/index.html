@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LipScan Viewer</title>
+<style>
+  :root {
+    --bg: #f3f2ef; --panel: #ffffff; --line: #dedbd5; --text: #22201c; --muted: #6d6860;
+    --accent: #c2410c; --accent-2: #0f6b8f; --view: #e7e5e0; --btn: #f6f5f2; --btn-hover: #ebe8e2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17171a; --panel: #1f1f23; --line: #34343a; --text: #ecebe8; --muted: #9b9a96;
+      --accent: #f97316; --accent-2: #38bdf8; --view: #121214; --btn: #2a2a30; --btn-hover: #34343b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17171a; --panel: #1f1f23; --line: #34343a; --text: #ecebe8; --muted: #9b9a96;
+    --accent: #f97316; --accent-2: #38bdf8; --view: #121214; --btn: #2a2a30; --btn-hover: #34343b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, "Segoe UI", sans-serif; display: grid;
+         grid-template-rows: auto 1fr auto; overflow: hidden; }
+  header { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 14px; margin: 0 10px 0 0; font-weight: 650; letter-spacing: .2px; }
+  button, select, label.file, input[type=number] { font: inherit; color: var(--text); background: var(--btn); border: 1px solid var(--line);
+         border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  button:hover, label.file:hover, select:hover { background: var(--btn-hover); }
+  label.file input { display: none; }
+  label.file span:not(.dot) { display: inline-block; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+  input[type=number] { width: 72px; cursor: text; }
+  .spacer { flex: 1; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  main { position: relative; display: grid; grid-template-columns: 1fr 240px; min-height: 0; }
+  #view { position: relative; background: var(--view); min-height: 0; }
+  #view canvas { display: block; width: 100%; height: 100%; }
+  #drop { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); pointer-events: none; padding: 20px; }
+  #drop b { color: var(--text); }
+  #drop.over { background: color-mix(in srgb, var(--accent) 12%, transparent); outline: 2px dashed var(--accent); outline-offset: -10px; }
+  #videoPane { position: absolute; left: 10px; bottom: 10px; width: min(28%, 320px); border-radius: 8px; overflow: hidden;
+               background: #000; border: 1px solid var(--line); box-shadow: 0 2px 10px rgb(0 0 0 / .25); }
+  #videoPane img { display: block; width: 100%; height: auto; }
+  #videoNote { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 8px; font-size: 11px; color: #fff; background: rgb(0 0 0 / .55); }
+  #videoPane.noface #videoNote { background: rgb(150 30 30 / .75); }
+  .labels { position: absolute; top: 10px; gap: 12px; left: 0; right: 0; display: flex; justify-content: space-around; pointer-events: none; font-weight: 600; }
+  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 10px 12px; overflow: auto; min-height: 0; }
+  aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 12px 0 6px; }
+  aside h2:first-child { margin-top: 0; }
+  .row { display: flex; gap: 6px; align-items: center; margin: 4px 0; flex-wrap: wrap; }
+  .bar { display: grid; grid-template-columns: 1fr 60px; gap: 6px; align-items: center; font-size: 11.5px; margin: 2px 0; }
+  .bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar i { display: block; height: 7px; border-radius: 4px; background: var(--accent); }
+  #info { color: var(--muted); font-size: 12px; white-space: pre-wrap; }
+  footer { display: grid; grid-template-columns: auto auto 1fr auto; gap: 10px; align-items: center; padding: 8px 12px; background: var(--panel); border-top: 1px solid var(--line); }
+  #play { width: 64px; font-weight: 600; }
+  #time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 120px; }
+  #timeline { width: 100%; height: 56px; display: block; border-radius: 6px; background: var(--view); cursor: pointer; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } aside { display: none; } footer { grid-template-columns: auto 1fr; } #time, footer .opts { grid-column: span 2; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>LipScan Viewer</h1>
+  <label class="file" title="Choose the folder made by build_character.py">Character… <input id="fChar" type="file" webkitdirectory multiple></label>
+  <label class="file" title="A game .anims export or a LipScan .json"><span class="dot" style="background:var(--accent)"></span><span id="nameA">Animation A…</span> <input id="fA" type="file" accept=".glb,.json"></label>
+  <select id="clipA" title="Clip in animation A"></select>
+  <label class="file" title="A game .anims export or a LipScan .json"><span class="dot" style="background:var(--accent-2)"></span><span id="nameB">Animation B…</span> <input id="fB" type="file" accept=".glb,.json"></label>
+  <select id="clipB" title="Clip in animation B"></select>
+  <label class="file" title="Voice audio"><span id="nameAudio">Audio…</span> <input id="fAudio" type="file" accept="audio/*,.wav,.ogg,.mp3,.opus,.flac"></label>
+  <label class="file" title="A LipScan trace folder (trace.json + frames): shows the real face next to the character"><span id="nameVideo">Video…</span> <input id="fVideo" type="file" webkitdirectory multiple></label>
+  <span class="spacer"></span>
+  <select id="viewMode" title="Which heads to show">
+    <option value="A">Show A</option><option value="B">Show B</option><option value="AB">A and B side by side</option>
+  </select>
+</header>
+<main>
+  <div id="view">
+    <div class="labels" id="labels"></div>
+    <div id="videoPane" hidden><img id="videoImg" alt="Source video frame"><div id="videoNote"></div></div>
+    <div id="drop"><div><b>Drop files here</b><br>a character folder (character.json + .glb meshes),<br>then an animation: a WolvenKit <code>.anims</code> glTF export or a LipScan <code>.json</code>,<br>and optionally the voice audio.</div></div>
+  </div>
+  <aside>
+    <h2>Character</h2>
+    <div id="info">No character loaded.</div>
+    <h2>Show</h2>
+    <div class="row"><label><input type="checkbox" id="showBrows" checked> Eyebrows</label><label><input type="checkbox" id="showEyes" checked> Eyes</label><label><input type="checkbox" id="showTeeth" checked> Teeth</label></div>
+    <div class="row"><label><input type="checkbox" id="wire"> Wireframe</label><label><input type="checkbox" id="frontCam"> Front camera</label></div>
+    <div class="row"><label title="Head turns from a LipScan .json (video traces and the voice model)"><input type="checkbox" id="headMotion" checked> Head motion</label><label><input type="checkbox" id="showVideo" checked> Video</label></div>
+    <h2>Audio</h2>
+    <div class="row">Offset <input type="number" id="offset" value="0" step="10"> ms</div>
+    <h2>Try a pose</h2>
+    <div class="row"><select id="poseTrack" style="max-width:100%"></select></div>
+    <div class="row"><input type="range" id="poseValue" min="0" max="1" step="0.01" value="0" style="flex:1"> <span id="poseNum">0.00</span></div>
+    <div class="row"><button id="poseClear">Clear</button></div>
+    <h2>Active tracks (A)</h2>
+    <div id="active"></div>
+  </aside>
+</main>
+<footer>
+  <button id="play" title="Space">Play</button>
+  <div id="time">0.00 / 0.00 s</div>
+  <canvas id="timeline" title="Click or drag to seek. Arrow keys step one frame."></canvas>
+  <div class="opts row">
+    <select id="speed" title="Speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option></select>
+    <label><input type="checkbox" id="loop" checked> Loop</label>
+  </div>
+</footer>
+<!--APP-->
+</body>
+</html>

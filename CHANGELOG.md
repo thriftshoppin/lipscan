@@ -4,6 +4,14 @@
 
 The whole face, not just the mouth.
 
+- **New: `viewer/`.** The source of the 3D face viewer:
+  - the character-pack converter
+  - the solver, with head motion
+  - the A/B player, with the video pane
+  - one-file build
+
+  You build packs from your own game install. No game data, packs or built viewer are included, and `.gitignore` guards against game files, audio, frames and screenshots.
+
 - **New: `analyze/performance.py`.** Records the whole facial performance from a trace, frame by frame on the video's own clock, into `performance.json`:
   - all 52 MediaPipe blendshapes
   - head yaw, pitch, roll and position
