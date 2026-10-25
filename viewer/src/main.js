@@ -613,6 +613,18 @@ $("fMood").addEventListener("change", async (e) => {
 });
 for (const s of ["A", "B"]) $(`mood${s}`).addEventListener("change", () => { computeCurve(s); render(); });
 $("showVideo").addEventListener("change", () => { $("videoPane").hidden = !state.video || !$("showVideo").checked; shownFrame = -1; showFrame(); });
+// Hide the source video (the button on it, the V key, or &hidevideo=1); the choice is remembered in this browser.
+function setVideoShown(on) {
+  $("showVideo").checked = on;
+  $("showVideo").dispatchEvent(new Event("change"));
+  try { localStorage.setItem("lipscan.video", on ? "1" : "0"); } catch {}
+}
+$("videoHide").onclick = () => setVideoShown(false);
+{
+  let pref = null;
+  try { pref = localStorage.getItem("lipscan.video"); } catch {}
+  if (pref === "0" || new URLSearchParams(location.search).get("hidevideo") === "1") $("showVideo").checked = false;
+}
 $("clipA").addEventListener("change", (e) => selectClip("A", +e.target.value));
 $("clipB").addEventListener("change", (e) => selectClip("B", +e.target.value));
 $("viewMode").addEventListener("change", () => { if ($("viewMode").value !== "A" && !state.clip.B) $("viewMode").value = "A"; layout(); });
@@ -655,6 +667,7 @@ window.addEventListener("keydown", (e) => {
   else if (k === "3") viewFrom(90, 1.0);
   else if (k === "4") viewFrom(-90, 1.0);
   else if (k === "0") { const t = controls.target; camera.position.set(t.x - 0.2, t.y + 0.02, t.z - 0.85); camera.lookAt(t); }
+  else if (k === "v") { setVideoShown(!$("showVideo").checked); return; }
   else return;
   $("frontCam").checked = k === "1";
 });
@@ -853,7 +866,7 @@ async function loadDemo() {
     if (location.protocol !== "file:" && (l.hybrid || l.audio)) {   // the dials need the dev server; probe it once per line
       const ok = await fetch("/api/gen").then((r) => r.status !== 404, () => false);
       if (ok) {
-        const base = { profile: demo.profile || "speech" };
+        const base = { profile: l.profile || demo.profile || "speech" };
         const jobs = { B: { mode: "voice", wav: l.audio, ...(l.text && !l.noText ? { text: l.text } : {}), ...base } };
         if (l.hybrid) jobs.A = { mode: "hybrid", folder: l.hybrid, ...base };
         live = { jobs, rig: c.pack.replace(/\/?$/, "/") + "character.json", settings: null };

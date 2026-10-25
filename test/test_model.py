@@ -166,5 +166,13 @@ with tempfile.TemporaryDirectory() as tmp:
     mute = lipsync.simulate_lipsync(wav, words=[(0.28, "maybe")], coupling=0)["tracks"]
     check("forward: no rounded sound, no forward push", peak(mute, "lips_l_funnel") < 0.05)
 
+    # ---- authored couplings stay inside what the game's rig takes (0.3.2) ----
+    smile = {"jaw_mid_open": [0.3] * 30, "lips_l_corner_up": [1.0] * 30, "lips_r_corner_up": [1.0] * 30, "lips_l_pull": [1.0] * 30, "lips_l_stretch": [1.0] * 30,
+             "lips_together_up": [0.0] * 30}
+    _cp.couple(smile, 30, 2.0, 1.3)
+    check("coupling: a huge smile cannot push the smile fold or the squint past their caps",
+          max(smile["lips_l_nasolabialDeepener"]) <= 0.35 + 1e-9 and max(smile["eye_l_oculi_squint_outer_lower"]) <= 0.3 + 1e-9,
+          f"{max(smile['lips_l_nasolabialDeepener']):.2f} / {max(smile['eye_l_oculi_squint_outer_lower']):.2f}")
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

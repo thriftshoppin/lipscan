@@ -79,7 +79,7 @@
 <main>
   <div id="view">
     <div class="labels" id="labels"></div>
-    <div id="videoPane" hidden><img id="videoImg" alt="Source video frame"><div id="videoNote"></div></div>
+    <div id="videoPane" hidden><img id="videoImg" alt="Source video frame"><div id="videoNote"></div><button id="videoHide" title="Hide the video (V)" style="position:absolute;top:4px;right:4px;padding:1px 7px;opacity:.75">Hide</button></div>
     <div id="drop"><div><b>Drop files here</b><br>a character folder (character.json + .glb meshes),<br>then an animation: a WolvenKit <code>.anims</code> glTF export or a LipScan <code>.json</code>,<br>and optionally the voice audio.</div></div>
   </div>
   <aside>
@@ -102,7 +102,7 @@
     <h2>Show</h2>
     <div class="row"><label><input type="checkbox" id="showBrows" checked> Eyebrows</label><label><input type="checkbox" id="showEyes" checked> Eyes</label><label><input type="checkbox" id="showTeeth" checked> Teeth</label></div>
     <div class="row"><label><input type="checkbox" id="wire"> Wireframe</label><label><input type="checkbox" id="frontCam"> Front camera</label></div>
-    <div class="row"><label title="Head turns from a LipScan .json (video traces and the voice model)"><input type="checkbox" id="headMotion" checked> Head motion</label><label><input type="checkbox" id="showVideo" checked> Video</label></div>
+    <div class="row"><label title="Head turns from a LipScan .json (video traces and the voice model)"><input type="checkbox" id="headMotion" checked> Head motion</label><label><input type="checkbox" id="showVideo" checked> Video (V)</label></div>
     <div id="creatorBox" hidden>
       <h2>Character creator</h2>
       <div id="creator" class="creator"></div>
@@ -113,7 +113,7 @@
     <div class="row"><select id="mood" title="A held expression added to LipScan clips (game clips carry their own)" style="max-width:100%"></select></div>
     <div class="row"><label><input type="checkbox" id="moodA"> A</label><label><input type="checkbox" id="moodB" checked> B</label><input id="fMood" type="file" accept=".json" hidden></div>
     <div id="moodInfo" style="color:var(--muted);font-size:11.5px"></div>
-    <div class="row" style="color:var(--muted);font-size:11.5px">View keys: A/D turn · W/S tilt · Q/E zoom · 1 front · 2 ¾ · 3/4 profiles · 0 reset (Shift = bigger steps)</div>
+    <div class="row" style="color:var(--muted);font-size:11.5px">View keys: V hides the video · A/D turn · W/S tilt · Q/E zoom · 1 front · 2 ¾ · 3/4 profiles · 0 reset (Shift = bigger steps)</div>
     <h2>Audio</h2>
     <div class="row">Offset <input type="number" id="offset" value="0" step="10"> ms</div>
     <h2>Try a pose</h2>

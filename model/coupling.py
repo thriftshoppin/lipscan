@@ -24,6 +24,10 @@ import os
 _MODEL = None
 BOTH = ("lips_l_", "cheek_l_", "nose_l_", "neck_l_", "eye_l_")
 
+# The most each authored coupling may reach. A big smile drove the smile fold to 1.0 and the mesh crumpled over the cheek: the game
+# never takes it near that (its held "warm" mood has the squint at 0.22-0.3 and the cheek tracks stay under 0.01).
+AUTHORED_MAX = {"lips_l_nasolabialDeepener": 0.35, "eye_l_oculi_squint_outer_lower": 0.3, "cheek_l_puff": 0.1}
+
 
 def model():
     global _MODEL
@@ -135,7 +139,8 @@ def couple(tracks, n, strength=1.0, presence=1.0, only=None):
         cols = [(tracks.get(s), w) for s, w in weights.items() if tracks.get(s) is not None]
         if not cols:
             continue
-        out = [min(1.0, sum(s[f] * w for s, w in cols) * gain) for f in range(n)]
+        top = AUTHORED_MAX.get(name, 1.0)
+        out = [min(top, sum(s[f] * w for s, w in cols) * gain) for f in range(n)]
         for nm in (name, name.replace("_l_", "_r_", 1) if name.startswith(BOTH) else None):
             if nm:
                 cur = tracks.get(nm)

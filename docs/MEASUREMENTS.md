@@ -323,6 +323,19 @@ What the game does: of its rounded sounds, 32% of "oo" get a purse peak above 0.
 
 **In the video** (the 30 s recording, no captions): the video's `mouthPucker` has a 95th percentile of 0.34 and `mouthFunnel` 0.010 (MediaPipe gives no funnel). Hybrid purse against the video's: 95th percentile 0.07 to 0.34, correlation 0.51 to 0.99. The voice model alone (no words, sound-only lips) correlates with it at 0.43 at a 3-frame lag and reaches 0.13; that path is not changed. On the rendered clip with known purse values, the video-only retarget correlates with the truth at 0.69 but reads small (95th percentile 0.06 for a true 0.31); the old hybrid fell to 0.40, the new one keeps 0.69 and lifts the size to 0.15. **Not measured:** the per-sound hit rate against video (`analyze.py --forward`) needs caption words, and neither recording has any, so it is covered by synthetic tests only and the video numbers here are whole-clip.
 
+## Lip separation (0.3.2)
+
+One close-up recording of someone singing (193 s, 5,794 frames, face found in 95%). The video's own lip gap (the distance between the inner lips, over the distance between the eyes' outer corners) is the reference. Gap 5th / 50th / 95th percentile 0.004 / 0.086 / 0.184. Correlation of the gap with `jawOpen` 0.66, with `mouthLowerDown` 0.69, with `mouthRollLower` -0.45; a fit on eight blendshapes reaches 0.96 (about 0.18 jaw + 0.16 lower-lip drop - 0.18 lower-lip roll). In 642 frames the lips were apart (gap above 0.06) with `jawOpen` under 0.08.
+
+| Hybrid, singing profile | Voice-led (before) | Video-led (after) |
+|---|---|---|
+| Match with the measured gap (the proxy above built from the hybrid's `jaw_mid_open`, `lips_apart_dn`, `lips_suck_dn`) | 0.61 | 0.95 |
+| Jaw median (the video's 0.16) | 0.27 | 0.15 |
+| `lips_apart_dn` where the lips are apart and the jaw is shut | 0.18 | 0.31 |
+| `lips_apart_up` median | 0.31 | 0.20 |
+
+Judged by eye on three such frames, the video-led hybrid shows his parted lips and teeth where the voice-led one opened its jaw. The video-led mode only switches on when the jaw reads at the rig's scale: this clip's 95th percentile is 0.64 and the first test clip's is 0.16 (which stays voice-led). The 0.3 threshold sits between those two clips and nothing else; it is not tuned on more faces.
+
 ## How well the voice-driven upper face matches
 
 Same clips; the model hears only the audio. "Hit" = a model blink starting within 0.3 s of the game's. "By chance" is what blinks at the same rate, placed at random, would score.

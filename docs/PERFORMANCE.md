@@ -120,6 +120,8 @@ The hybrid takes the same dials as the voice model: `--articulation`, `--express
 
 Lips pushed forward: where the video reads pucker, the hybrid's purse is the video's (a weak reading lifted toward a 95th percentile of 0.15, at most 4 times; funnel is the larger of the two; purse + funnel at most 0.6). Without it the voice model's purse was scaled by the mouth size and the video's pucker was discarded. `analyze.py "<folder>" --forward` scores this against the video (docs/MEASUREMENTS.md).
 
+Lip separation: when the video's jaw reaches the rig's scale (95th percentile 0.3 or more), the hybrid's jaw, lower-lip drop, upper lip and chin come from the video instead of the voice, and the lip tracks that ride on the jaw ride on the video's jaw; the voice keeps closures, tongue and neck. `--mouth-from auto|video|voice` (auto by default). A small or turned face reads weakly and stays voice-led. Numbers in docs/MEASUREMENTS.md.
+
 ## In the viewer
 
 The face viewer (built with `claude/skills/cyberpunk-face-viewer`) plays `retarget-cyberpunk.json` in slot A or B:

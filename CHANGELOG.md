@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.2 (2026-10-25)
+
+Lip separation, found on a close-up singing video, and a video hide button.
+
+- **Lip separation from the video.** The hybrid took the jaw and every lip-opening track from the voice, and in the singing profile the upper lip opens 1.3 times the jaw. His lips parted differently: in a tenth of the frames (642 of 5,794) they were visibly apart with the jaw nearly shut (a grin with the teeth showing), which only the lower lip's drop shows, and the hybrid had discarded that. On the 193 s song, his measured lip gap is explained 0.96 by `0.18 jaw + 0.16 lower-lip drop - 0.18 lower-lip roll`. When the video reads the mouth at the rig's scale (jaw 95th percentile of at least 0.3; the song reads 0.64, the first test clip 0.16), the hybrid now takes the jaw, the lower lip's drop (`lips_apart_dn`), the upper lip and the chin from the video wherever the face is seen, and the tracks that ride on the jaw ride on the video's. The voice still places closures, the tongue and the neck. `--mouth-from auto|video|voice`; auto is the default, so a weak reading stays voice-led as before. Gap match (the same proxy built from the hybrid's tracks, against the measured gap): 0.61 to 0.95; jaw median 0.27 to 0.15 (his: 0.16).
+- **Authored couplings capped.** On a wide smile the authored smile fold reached 1.0, far beyond anything the game uses, and the mesh crumpled over the cheek. The smile fold now stops at 0.35, the smile squint at 0.3 (the game's held warm mood is 0.22-0.3) and the press puff at 0.1.
+- **Viewer:** a Hide button on the video, the V key, `&hidevideo=1`; the choice is remembered in the browser. A Test-set line can set its own profile.
+- **Tests:** 6 new checks (33 in test_model.py, 77 in test_performance.py).
+- **Limits:** the 0.96 fit and the 0.3 trust level come from one clip (one face, one song); the gap proxy is a measure from the landmarks, not a render of the rig. Teeth and tongue visibility are not measured.
+
 ## 0.3.1 (2026-10-25)
 
 Lips that push forward. The mouth had width and height but almost no depth: rounded sounds barely pursed and the hybrid threw away the video's pucker.

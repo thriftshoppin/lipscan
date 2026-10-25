@@ -353,5 +353,29 @@ check("forward check: a model that puckers with the video hits both pucker sound
 check("forward check: whole-clip correlation is high for the matching curve and a pucker the video lacks counts as false",
       sc_good["model"]["corr"] > 0.95 and sc_good["model"]["false"] == 0.0 and an2.forward_scores({"lips_l_purse": [0.5] * n}, vid, good, segs, n)["purse"]["model"]["false"] > 0)
 
+# ---- 0.3.2: lip separation led by the video when it reads the mouth at the rig's scale ----
+n = 150
+t_ = np.arange(n) / 30
+jaw_v = np.clip(0.5 + 0.45 * np.sin(2 * np.pi * 0.8 * t_), 0, 1)             # a rig-sized reading (95th percentile ~0.9)
+weak_v = jaw_v * 0.15
+check("video-led mouth: a rig-sized jaw reading is trusted, a small face's is not", rt.video_mouth_trusted(jaw_v) and not rt.video_mouth_trusted(weak_v))
+drop = np.zeros(n)
+drop[60:90] = 0.7                                                             # lips apart with the jaw shut: only the lower lip's drop shows it
+shut = jaw_v.copy()
+shut[60:90] = 0.02
+video = {"jaw_mid_open": shut, "lips_apart_dn": drop, "lips_l_upper_raise": drop * 0.5}
+voice = {"jaw_mid_open": np.full(n, 0.7), "lips_apart_dn": np.full(n, 0.5), "lips_apart_up": np.full(n, 0.9), "lips_l_lower_raise": np.full(n, 0.6)}
+h = rt.hybrid_tracks(video, voice, size=None, led=True, follow={"lips_apart_up": 1.29, "lips_l_lower_raise": 1.0, "lips_apart_dn": 0.82})
+check("video-led mouth: the jaw and the lower lip's drop are the video's, so lips can part with the jaw shut",
+      np.allclose(h["jaw_mid_open"], shut) and np.allclose(h["lips_apart_dn"], drop) and h["jaw_mid_open"][75] < 0.05 < h["lips_apart_dn"][75])
+check("video-led mouth: the tracks that ride on the jaw ride on the video's jaw, not the voice's",
+      np.allclose(h["lips_apart_up"], np.clip(1.29 * shut, 0, 1)) and np.allclose(h["lips_l_lower_raise"], np.clip(shut, 0, 1)))
+h0 = rt.hybrid_tracks(video, voice, size=None, led=False)
+check("voice-led mouth (the default for a weak reading) is unchanged", np.allclose(h0["lips_apart_dn"], 0.5) and h0["jaw_mid_open"][75] >= 0.7)
+gap = shut.copy()
+gap[:20] = np.nan
+hg = rt.hybrid_tracks({"jaw_mid_open": gap, "lips_apart_dn": np.where(np.isnan(gap), np.nan, drop)}, voice, size=None, led=True, follow={"lips_apart_up": 1.0})
+check("video-led mouth: where no face is seen the voice's mouth carries on", np.allclose(hg["jaw_mid_open"][:20], 0.7) and np.allclose(hg["lips_apart_dn"][:20], 0.5))
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

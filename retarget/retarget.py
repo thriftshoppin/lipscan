@@ -197,7 +197,41 @@ def forward_from_video(video, out):
     return out
 
 
-def hybrid_tracks(video, voice, size=None):
+VIDEO_MOUTH_TRUST = 0.3      # the video's jaw (95th percentile) must reach this, a rig-sized reading, before the mouth is led by the video
+VIDEO_LED = ("jaw_mid_open", "lips_apart_dn", "lips_l_upper_raise", "lips_r_upper_raise", "lips_chin_raise")
+
+
+def video_mouth_trusted(jaw):
+    """True when the video reads the mouth at the rig's scale (a close, front-on face): the jaw's 95th percentile is at least
+    VIDEO_MOUTH_TRUST (the game's speech is 0.35, its singing 0.8; the small, turned face in the first test clip read 0.16)."""
+    ok = ~np.isnan(jaw)
+    return bool(ok.sum() >= 30 and np.percentile(jaw[ok], 95) >= VIDEO_MOUTH_TRUST)
+
+
+def lead_mouth_from_video(video, out, follow):
+    """Lip separation. The voice only knows how loud the voice is, and its lips ride on its jaw (the singing profile opens the
+    upper lip 1.3 times the jaw); a lip gap measured on the video is explained 0.96 by the jaw, the lower lip's drop and its roll
+    (about 0.18 jaw + 0.16 drop - 0.18 roll), and in a tenth of the frames the lips were visibly apart with the jaw nearly
+    shut, which only the drop shows. So with a trusted video the jaw, the lower lip's drop (apart_dn), the upper lip and the chin
+    come from the video wherever the face is seen, and the tracks that ride on the jaw (follow_jaw, which have no video source)
+    ride on the video's jaw instead of the voice's. The voice still places closures, the tongue and the neck."""
+    vj = video.get("jaw_mid_open")
+    if vj is None:
+        return out
+    seen = ~np.isnan(vj)
+    for k in VIDEO_LED:
+        v = video.get(k)
+        if v is not None:
+            out[k] = np.where(~np.isnan(v), v, out.get(k, np.zeros_like(v)))
+    jaw = np.nan_to_num(out["jaw_mid_open"])
+    for name, gain in (follow or {}).items():
+        if name in video and name in VIDEO_LED or name.startswith(("lips_l_corner", "lips_r_corner")):
+            continue                                             # the video has its own (or, for the corners, the smile comes from it)
+        out[name] = np.where(seen, np.clip(gain * jaw, 0.0, 1.0), out.get(name, np.zeros_like(vj)))
+    return out
+
+
+def hybrid_tracks(video, voice, size=None, led=False, follow=None):
     """video, voice: {track: array}. Speech tracks come from the voice; the jaw also takes the video where the video
     shows the mouth open further than the voice suggests; every other track comes from the video. No face in a frame:
     the video-sourced tracks are empty there, the voice-sourced ones carry on."""
@@ -213,6 +247,8 @@ def hybrid_tracks(video, voice, size=None):
                 out[k] = np.fmax(out.get(k, np.zeros_like(v)), np.nan_to_num(v))
         else:
             out[k] = v
+    if led:
+        out = lead_mouth_from_video(video, out, follow)
     return forward_from_video(video, out)
 
 
@@ -240,7 +276,7 @@ def jl(a, nd=4):
     return [None if (isinstance(x, float) and math.isnan(x)) or (hasattr(x, "dtype") and np.isnan(x)) else round(float(x), nd) for x in a]
 
 
-def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True, size=True,
+def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True, size=True, mouth_from="auto",
              articulation=None, expressiveness=None, coupling=1.0, jaw_presence=1.0, profile="speech"):
     folder = os.path.abspath(folder)
     perf = json.load(open(os.path.join(folder, "performance.json"), encoding="utf-8"))
@@ -268,10 +304,14 @@ def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hy
     if hybrid and trace.get("audio"):
         dials = {k: v for k, v in (("articulation", articulation), ("expressiveness", expressiveness)) if v is not None}
         voice, nwords = audio_tracks(folder, trace, n, profile, **dials)
-        tracks = hybrid_tracks(tracks, voice, mouth_size(chan["jawOpen"]) if size else None)
+        led = mouth_from == "video" or (mouth_from == "auto" and video_mouth_trusted(chan["jawOpen"]))
+        import lipsync
+        follow = lipsync.load_profile(profile).get("follow_jaw") if led else None
+        tracks = hybrid_tracks(tracks, voice, mouth_size(chan["jawOpen"]) if size else None, led, follow)
         mode = "hybrid"
-        base["hybrid"] = {"mouth": "voice model" + (f" with {nwords} caption words" if nwords else " (no words: jaw, tongue and neck only)"),
-                          "face": "video"}
+        base["hybrid"] = {"mouth": ("jaw, lower lip, upper lip and chin from the video; " if led else "") + "voice model"
+                          + (f" with {nwords} caption words" if nwords else " (no words: jaw, tongue and neck only)"), "face": "video",
+                          "mouth_led_by": "video" if led else "voice"}
     elif tongue:
         for k, v in tongue_from_audio(folder, trace, n).items():
             tracks[k] = np.where(face_seen, v, np.nan)
@@ -300,13 +340,15 @@ def main():
     ap.add_argument("--jaw-presence", type=float, default=None, help="how much this face's jaw shows, from the rig (0.7-1.3, default 1.0)")
     ap.add_argument("--rig", help="a character.json: sets --jaw-presence from that face's jaw (unless given)")
     ap.add_argument("--profile", default="speech", help="voice profile for the hybrid's voice side")
+    ap.add_argument("--mouth-from", choices=("auto", "video", "voice"), default="auto",
+                    help="(hybrid) who leads the jaw and lip separation: video when it reads the mouth at the rig's scale (auto), always, or never")
     ap.add_argument("--no-size", action="store_true", help="(hybrid) don't scale the voice's jaw and lips by the mouth size seen in the video")
     ap.add_argument("--video-only", action="store_true",
                     help="read the mouth from the video too. Default is a hybrid: jaw, lips, tongue and neck from the voice, "
                          "everything else (head, brows, eyes, blinks, gaze, smiles) from the video")
     ap.add_argument("--out")
     a = ap.parse_args()
-    res = retarget(a.folder, a.mapping, a.export, not a.no_tongue, hybrid=not a.video_only, size=not a.no_size,
+    res = retarget(a.folder, a.mapping, a.export, not a.no_tongue, hybrid=not a.video_only, size=not a.no_size, mouth_from=a.mouth_from,
                    articulation=a.articulation, expressiveness=a.expressiveness, coupling=min(2.0, max(0.0, a.coupling)),
                    jaw_presence=min(1.3, max(0.7, a.jaw_presence if a.jaw_presence is not None else rig_presence(a.rig))), profile=a.profile)
     if a.out == "-":
