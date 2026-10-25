@@ -1,8 +1,11 @@
 # LipScan
 
-LipScan measures how real mouths move in video and audio. It then uses those measurements to turn speech or singing into lipsync animation curves.
+LipScan measures how real faces move in video and audio: the mouth, and since 0.2.0 the whole face (brows, eyes, blinks, gaze, cheeks, nose and head motion). It then uses those measurements in two ways:
 
-- **Tracking, not recognition.** It measures what a face is doing (jaw opening, lip shapes, blinks). It never identifies who someone is, and it stores no face prints.
+- to play a recorded performance back on a face rig
+- to turn speech or singing alone into face animation curves
+
+- **Tracking, not recognition.** It measures what a face is doing (jaw opening, lip shapes, brows, blinks, head turns). It never identifies who someone is, and it stores no face prints or face points.
 - **A developer tool.** It runs entirely on your own PC, from source. It isn't published on addons.mozilla.org or in any plugin directory.
 - **Built for Claude.** Claude (Claude Code or the Claude desktop app) drives it through MCP, but the model and analysis also run on their own from the command line.
 - **Game-neutral.** Cyberpunk 2077 was the first target, but the core is game-neutral.
@@ -21,25 +24,33 @@ Those rules became a model. To check them against real people rather than one ga
 ## What it does
 
 ```
- capture/        analyze/                    model/                     export/
- YouTube  --->   face tracking (MediaPipe)   voice (+ words)  --->      arkit52 (Unreal, Unity,
- frames,         + measurements    ---->     mouth curves               Blender, VRChat...)
- sound,          (jaw lead, loudness curve,  shaped by a                cyberpunk (REDengine
- captions        speeds, blinks, symmetry)   profile/                   face rig, via WolvenKit)
+ capture/        analyze/                       retarget/                  export/
+ YouTube  --->   whole-face tracking  -------->  performance -> face-rig    arkit52 (Unreal, Unity,
+ frames,         (MediaPipe: 52 shapes,          curves + head angles       Blender, VRChat...)
+ sound,          head pose, gaze), clean-up,                                cyberpunk (REDengine
+ captions        measurements -> profile/  ->  model/: voice (+ words) ->  face rig, via WolvenKit)
+                                                mouth + upper-face curves
 ```
 
 1. **Capture:** a Firefox add-on plus an MCP server record a YouTube video's frames, sound and captions. Sound and picture are both stamped with the video's own clock, so they stay in sync through seeks, pauses and ads.
-2. **Analyze:** tracks the face in every frame (52 ARKit-style blendshapes and the lip gap), then measures:
-   - how far the jaw runs ahead of the sound
-   - how loudness maps to jaw opening
-   - opening and closing speeds
-   - syllables per second
-   - blinks
-   - left/right symmetry
+2. **Performance:** `analyze/performance.py` tracks the whole face in every frame and writes `performance.json`:
+   - all 52 MediaPipe blendshapes
+   - head yaw, pitch and roll, plus position
+   - gaze per eye
+   - detection confidence
+   - gaps where no face was seen
+
+   It then cleans the curves up. It locks onto one face, fills short gaps, subtracts the person's resting face, and smooths with settings that keep blinks. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+3. **Retarget:** `retarget/retarget.py` maps the performance onto a face rig through an editable mapping (`export/mediapipe_to_cyberpunk.json`, with a gain, offset and clamp per link). The result is face-track curves plus head angles that a viewer or game can play.
+4. **Analyze:** measures the mouth and, from `performance.json`, the upper face:
+   - **Mouth:** jaw lead, the loudness-to-jaw curve, speeds, syllables per second, symmetry
+   - **Upper face:** blinks, brow raises and how they lead the voice, head motion, gaze
 
    It scores the model against the real face, and can save the measurements as a new **profile**.
-3. **Model:** turns a voice recording, optionally with its words and their times, into per-frame curves for the jaw, lips and tongue.
-4. **Export:** writes those curves for a target: the generic 52 ARKit blendshape names, or Cyberpunk 2077's face-rig names (see [docs/WOLVENKIT.md](docs/WOLVENKIT.md)).
+5. **Model:** turns a voice recording, optionally with its words and their times, into per-frame curves:
+   - **mouth:** jaw, lips and tongue
+   - **upper face:** blinks placed in pauses, brow raises on stressed syllables, frowns and squints on loud stretches, resting gaze and small head nods
+6. **Export:** writes those curves for a target: the generic 52 ARKit blendshape names, or Cyberpunk 2077's face-rig names (see [docs/WOLVENKIT.md](docs/WOLVENKIT.md)).
 
 ## Layout
 
@@ -47,10 +58,11 @@ Those rules became a model. To check them against real people rather than one ga
 |---|---|
 | `capture/extension/` | Firefox add-on. It can only touch `youtube.com` tabs and only talks to `127.0.0.1:8766`. It never writes files. Its badge shows ON, OFF or REC, and the popup has an off switch and a Stop button. |
 | `capture/server/` | MCP server `lipscan` (Node 18+, no dependencies). Tools: `lipscan_status`, `lipscan_start`, `lipscan_stop`, `lipscan_list`. |
-| `analyze/` | Face tracking and measurements (Python, MediaPipe). |
-| `model/` | Voice and words to mouth curves (plain Python, no dependencies). Includes the CMU Pronouncing Dictionary. |
+| `analyze/` | Whole-face tracking (`performance.py`), measurements (`analyze.py`), and measuring a game character's upper face (`game_upper_face.py`). Python and MediaPipe. |
+| `retarget/` | Recorded performance to face-rig curves and head angles. |
+| `model/` | Voice and words to face curves (plain Python, no dependencies; numpy makes pitch tracking faster). Includes the CMU Pronouncing Dictionary. |
 | `profiles/` | Measured settings: `speech-cyberpunk`, `singing-cyberpunk`, and any you make. |
-| `export/` | Track naming for each target. |
+| `export/` | Track naming for each target, and the editable MediaPipe-to-Cyberpunk mapping. |
 | `test/` | Self-tests and a terminal driver. |
 | `docs/` | History, WolvenKit guide, measurements, profiles, security. |
 | `claude/skills/cyberpunk-face-viewer/` | A Claude skill that builds a 3D face viewer **on your own PC from your own game files**: game clips and LipScan curves played on a character's real head, side by side. No game data or prebuilt viewer is shipped. |
@@ -68,7 +80,7 @@ Those rules became a model. To check them against real people rather than one ga
    ```
    python -m venv .venv
    .venv\Scripts\pip install mediapipe
-   .venv\Scripts\python analyze\get_model.py      # downloads MediaPipe's face model into models\
+   .venv\Scripts\python analyze\get_model.py      # downloads MediaPipe's face models into models\
    ```
 2. **Firefox add-on:** go to `about:debugging` > This Firefox > Load Temporary Add-on, and pick `capture\extension\manifest.json`. For a permanent copy, sign it yourself with `sign.ps1`. This signs it privately ("unlisted"), and your AMO key stays in memory only.
 3. **Connect Claude:** click the LipScan toolbar icon, then **Copy connection code**. Add the server to your Claude config:
@@ -94,6 +106,11 @@ Those rules became a model. To check them against real people rather than one ga
   node test\lipscan-call.mjs lipscan_start "{\"maxSeconds\":30}" --wait
   ```
 - **Fix captions:** edit `captions.txt` in the recording's folder. Change only the words after the tab; YouTube's per-word times are kept.
+- **Record the whole face, then put it on a rig:**
+  ```
+  .venv\Scripts\python analyze\performance.py "<folder>"           # writes performance.json
+  .venv\Scripts\python retarget\retarget.py "<folder>"             # writes retarget-cyberpunk.json
+  ```
 - **Analyze:**
   ```
   .venv\Scripts\python analyze\analyze.py "<folder>" [--profile speech|singing] [--save-profile my-singer]
@@ -124,14 +141,22 @@ These numbers compare the model with Cyberpunk 2077's own lipsync, for the chara
 | Lips shut on p/b/m | 75% hits | |
 | Lower lip tucked on f/v | 77% hits | |
 | Lips pursed on oo/w | 61% hits | |
+| Blink timing (from audio alone) | 68% hits (15% by chance) | 26% hits (16% by chance) |
+| Brow raise correlation | 0.32 | rare in the game |
+| Frown correlation | 0.25 | 0.32 |
 
-The tongue is the weakest part so far. Timed caption words are meant to improve it. Details are in [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md).
+The tongue and the brows are the weakest parts so far:
+- **Tongue:** timed caption words are meant to improve it.
+- **Brows:** whether a line gets a raise or a frown is often an actor's choice that the audio doesn't reveal.
+
+The game's face clips contain no head turns, so the model's head motion has no game reference. Measure it from real video instead. Details are in [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md).
 
 ## Status
 
 | Part | State |
 |---|---|
 | Model, profiles, exporters | Working. 12 checks in `test/test_model.py`. |
+| Whole-face capture, clean-up, retarget, voice-driven upper face | Working. 26 checks in `test/test_performance.py`. Head angles and left/right checked on renders of a game head. |
 | Capture server and add-on login | Working. 28 checks in `test/selftest.mjs` against a fake add-on. |
 | Live capture on YouTube | Built, first live run pending |
 | Analysis | Runs end to end; scoring on real faces pending the first live capture |
@@ -146,6 +171,7 @@ npm install
 node selftest.mjs
 cd ..
 python test\test_model.py
+python test\test_performance.py
 ```
 
 ## Responsible use

@@ -72,7 +72,52 @@ Other findings:
 | | Speech | Singing |
 |---|---|---|
 | Left/right symmetry | perfect (JALI) | slightly lopsided (motion capture) |
-| Blinks per minute | none in the lipsync layer | 18.3 |
+| Blinks per minute | 18.3 (in the lipsync layer of 22 of 27 clips) | 18.7 |
+
+## Upper face (0.2.0)
+
+Measured with `analyze/game_upper_face.py` on 27 speech clips (102 s), and on the concert motion capture against its vocal stem.
+
+**Speech: the game's dialogue layer**
+- **Blinks:** 18.3 a minute. Each lasts about 0.1 s above half-closed, reaching 0.85 to 0.95.
+  - **Where blinks fall:** 65% fall in pauses. Almost every pause between phrases longer than about 0.3 s has a blink **in its middle**: of a pause from frame 38 to 72, the blink is at 55. Lines with no pause mostly have no blink.
+- **Brow raises:** 13 a minute, in 17 of 27 clips.
+  - **Shape:** peak strength median 0.47, lasting about 0.4 s. The inner and outer raise always move together.
+  - **What drives them:** their timing follows loudness (correlation 0.46 at zero lag) more than pitch (0.29).
+- **Frown:** in 15 of 27 clips, at a low level (median peak 0.12).
+  - **Shape:** brows lower, brows lateral and all three squints move together, as one gesture. A line usually has either a raise or a frown, rarely both.
+  - **What drives it:** it leads loudness by about 200 to 300 ms and goes against pitch (−0.19): lower voice, more frown.
+- **Gaze:** the eyes rest slightly down (`eye_*_dir_dn` about 0.1) in most clips.
+- **Head:** the face clips have no head turns; the game turns the head with the body skeleton. The face rig's `neck_*` and `head_neck_*` poses only move neck skin (measured: they don't rotate the head bone).
+
+**Singing: motion capture**
+- **Blinks:** 18.7 a minute.
+- **A strong, sustained frown:**
+  - brows lower: mean 0.65
+  - inner squint: mean 0.83
+  - lower squint: mean 0.36
+- **What drives it:** vocal **effort** (loudness above 60% of the range, squared), smoothed over a couple of seconds. That curve follows the frown at 0.43. Plain loudness only reaches 0.10.
+- **Brow raises:** rare and small (mean 0.08).
+- **Gaze:** the eyes rest further down (mean 0.27).
+
+## How well the voice-driven upper face matches
+
+Same clips; the model hears only the audio. "Hit" = a model blink starting within 0.3 s of the game's. "By chance" is what blinks at the same rate, placed at random, would score.
+
+| | Speech (27 lines) | Singing (2.5 min) |
+|---|---|---|
+| Jaw correlation (for comparison) | 0.80 | 0.76 |
+| Brow raise correlation | 0.32 (17 clips with raises) | 0.06 (raises are rare) |
+| Frown correlation | 0.25 (15 clips with frowns) | 0.32 |
+| Blink timing hits | **68%** (by chance: 15%) | 26% (by chance: 16%) |
+| Blinks per minute, model vs game | 15.9 vs 18.3 | 18 vs 18.7 |
+| Head motion | model 0.4° RMS; no game reference | model 0.75° RMS; no game reference |
+
+Notes:
+
+- **Blinks** come out best, because the game's rule (blink mid-pause) is learnable from audio alone. In singing, pauses are fewer and blinks freer, so hits are lower.
+- **Brows** are harder. Whether a line gets a raise, a frown or neither is largely an animator's or actor's choice, not something in the audio. A plain loudness curve correlates higher (0.46), but it moves the brows constantly, which the game never does. The model makes discrete gestures instead.
+- **Head motion** can't be scored against the game, which has none in its face data. Real head motion should be measured from video traces (`analyze.py` on a trace with `performance.json`), and `--save-profile` takes it over.
 
 ## How well the model matches
 

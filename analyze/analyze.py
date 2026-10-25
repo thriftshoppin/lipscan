@@ -249,6 +249,75 @@ def measure(face, db, voiced_db):
     return out
 
 
+def measure_upper(folder, db, voiced_db, n):
+    """Upper-face numbers from performance.json (analyze/performance.py): blinks, brows, head motion, gaze."""
+    path = os.path.join(folder, "performance.json")
+    if not os.path.exists(path):
+        return None
+    p = json.load(open(path, encoding="utf-8"))
+    t = np.array(p["t"], dtype=float)
+    grid = np.arange(n) / FPS
+
+    def ch(name):
+        v = np.array([np.nan if x is None else x for x in p["channels"][name]], dtype=float)
+        good = ~np.isnan(v)
+        if good.sum() < 2:
+            return np.full(n, np.nan)
+        out = np.interp(grid, t[good], v[good])
+        idx = np.clip(np.searchsorted(t[good], grid), 1, good.sum() - 1)
+        out[(t[good][idx] - t[good][idx - 1]) > 0.25] = np.nan
+        out[(grid < t[good][0]) | (grid > t[good][-1])] = np.nan
+        return out
+
+    seen = ~np.isnan(ch("jawOpen"))
+    minutes = seen.sum() / FPS / 60
+    out = {"face_seen": round(float(seen.mean()), 3)}
+    if minutes < 0.1:
+        return out
+    blink = np.nan_to_num((ch("eyeBlinkLeft") + ch("eyeBlinkRight")) / 2)
+    starts = [i for i in range(1, n) if blink[i] > 0.5 >= blink[i - 1]]
+    lens = []
+    for s in starts:
+        e = s
+        while e < n and blink[e] > 0.5:
+            e += 1
+        lens.append((e - s) / FPS)
+    voiced = db > voiced_db
+    out["blinks_per_minute"] = round(len(starts) / minutes, 1)
+    out["blink_seconds_median"] = round(float(np.median(lens)), 3) if lens else None
+    out["blinks_in_pauses"] = round(float(np.mean([not voiced[s] for s in starts])), 2) if starts else None
+
+    brow = (ch("browInnerUp") + (ch("browOuterUpLeft") + ch("browOuterUpRight")) / 2) / 2
+    b = np.nan_to_num(brow)
+    rises = [i for i in range(1, n) if b[i] > 0.25 >= b[i - 1]]
+    out["brow_raises_per_minute"] = round(len(rises) / minutes, 1)
+    # brows on emphasis: brow height at the loudest syllables vs the other syllables
+    peaks, _ = sim.loudness_peaks(list(db), voiced_db)
+    if len(peaks) >= 5:
+        loud_order = sorted(peaks, key=lambda f: -db[f])
+        top = loud_order[:max(1, len(peaks) // 5)]
+        rest = loud_order[max(1, len(peaks) // 5):]
+        out["brow_at_stressed_syllables"] = round(float(np.nanmean(brow[top])), 3)
+        out["brow_at_other_syllables"] = round(float(np.nanmean(brow[rest])), 3)
+    lag, r = best_lag(brow, np.clip(db, voiced_db - 10, None), span=15)
+    out["brow_leads_loudness_ms"] = None if lag is None else round(lag * 1000 / FPS)
+    out["brow_vs_loudness_corr"] = round(r, 3)
+    out["frown_mean"] = round(float(np.nanmean((ch("browDownLeft") + ch("browDownRight")) / 2)), 3)
+
+    yaw, pitch, roll = ch("headYaw"), ch("headPitch"), ch("headRoll")
+    rms = lambda x: float(np.sqrt(np.nanmean((x - np.nanmedian(x)) ** 2)))
+    out["head_rms_deg"] = {"yaw": round(rms(yaw), 2), "pitch": round(rms(pitch), 2), "roll": round(rms(roll), 2)}
+    pz = np.nan_to_num(pitch - np.nanmedian(pitch))
+    dips = [i for i in range(3, n - 3) if pz[i] < -1.5 and pz[i] == min(pz[i - 3:i + 4])]
+    out["head_nods_per_minute"] = round(len(dips) / minutes, 1)
+    out["head_nod_deg_median"] = round(float(-np.median(pz[dips])), 2) if dips else None
+    g = np.nanmean([np.abs(ch("gazeLeftYaw")), np.abs(ch("gazeRightYaw"))], axis=0)
+    out["gaze_yaw_abs_mean_deg"] = round(float(np.nanmean(g)), 2)
+    gp = np.nanmean([ch("gazeLeftPitch"), ch("gazeRightPitch")], axis=0)
+    out["gaze_pitch_mean_deg"] = round(float(np.nanmean(gp)), 2)
+    return out
+
+
 def score_sim(result, face, n):
     """Correlation (best lag within +-3 frames) between each simulated track and its counterpart on the real face."""
     out = {}
@@ -284,13 +353,31 @@ def save_profile(name, m, base, trace):
             cfg[table] = {k: round(min(1.0, (measured[min(known, key=lambda x: abs(x - k))][field]) * scale), 3) for k in keys}
     if m.get("jaw_leads_sound_ms") is not None:
         cfg["open_lead_ms"] = max(0, m["jaw_leads_sound_ms"])
-    if m.get("blinks_per_minute") is not None:
+    up = m.get("upper_face") or {}
+    if cfg.get("upper_face"):
+        u = cfg["upper_face"]
+        if up.get("blinks_per_minute") or m.get("blinks_per_minute"):
+            u["blinks_per_minute"] = up.get("blinks_per_minute") or m["blinks_per_minute"]
+        if up.get("brow_raises_per_minute") is not None:
+            u["brow_raises_per_minute"] = up["brow_raises_per_minute"]
+        if up.get("brow_leads_loudness_ms") is not None:
+            u["brow_lead_ms"] = max(0, up["brow_leads_loudness_ms"])
+        if up.get("head_nod_deg_median"):
+            u["head_nod_deg"] = up["head_nod_deg_median"]
+            u["head_nods_per_minute"] = up["head_nods_per_minute"]
+        if up.get("head_rms_deg"):
+            u["head_sway_deg"] = round(up["head_rms_deg"]["yaw"], 2)
+        if up.get("gaze_pitch_mean_deg") is not None:
+            u["gaze_down"] = round(max(0.0, -up["gaze_pitch_mean_deg"]) / 30, 3)   # the rig's eyes turn 30 deg down at 1
+    elif m.get("blinks_per_minute") is not None:
         cfg["blinks_per_minute"] = m["blinks_per_minute"]
     sym = list(m.get("left_right_corr", {}).values())
     if sym:
         cfg["symmetric"] = min(sym) > 0.95
     out = {"name": name, "about": f"Measured by LipScan from {trace['source'].get('title', 'a trace')}, based on {cfg.get('name', base)}.",
            "source": trace["source"].get("url", ""), "measured": {k: m[k] for k in ("jaw_leads_sound_ms", "jaw_vs_loudness_corr", "open_speed_p90", "close_speed_p90", "jaw_peaks_per_voiced_second", "blinks_per_minute", "face_seen", "traced_seconds")}}
+    if up:
+        out["measured"]["upper_face"] = up
     for k, v in cfg.items():
         if k in ("name", "about", "source"):
             continue
@@ -338,6 +425,7 @@ def main():
     m["source"] = trace["source"]
     m["traced_seconds"] = round(n / FPS, 2)
     m["profile"] = result["profile"]
+    m["upper_face"] = measure_upper(folder, db, voiced_db, n)
     json.dump(m, open(os.path.join(folder, "analysis.json"), "w"), indent=1)
 
     print(f"\n{trace['source']['title']}  ({m['traced_seconds']} s, face seen in {m['face_seen'] * 100:.0f}% of frames)")
@@ -351,6 +439,13 @@ def main():
     print(f"  model ({result['profile']}, {len(words)} caption words, {edited} lines corrected):")
     for k, v in m["simulator_vs_face"].items():
         print(f"    {k:40s} corr {v['corr']}")
+    up = m["upper_face"]
+    if up is None:
+        print("  upper face: run analyze/performance.py on this trace first for brows, blinks, head and gaze")
+    elif "blinks_per_minute" in up:
+        print(f"  upper face: blinks {up['blinks_per_minute']}/min ({up['blinks_in_pauses']} in pauses), "
+              f"brow raises {up['brow_raises_per_minute']}/min, brows lead loudness by {up['brow_leads_loudness_ms']} ms "
+              f"(corr {up['brow_vs_loudness_corr']}), head rms {up['head_rms_deg']} deg, nods {up['head_nods_per_minute']}/min")
     print(f"\nWrote {os.path.join(folder, 'analysis.json')}")
     if a.save_profile:
         result_path = save_profile(a.save_profile, m, a.profile, trace)

@@ -1,0 +1,124 @@
+# Whole-face performance capture
+
+LipScan 0.2.0 records the whole face, not only the mouth: brows, eyes, blinks, gaze, cheeks, nose, jaw, lips and head motion. It then plays that performance back on a face rig.
+
+```
+trace folder ──> analyze/performance.py ──> performance.json ──> retarget/retarget.py ──> retarget-cyberpunk.json
+(frames, audio)   MediaPipe, every frame     the real face,        mapping JSON:            face-rig curves + head
+                  + clean-up                 cleaned                 MediaPipe -> rig tracks   angles, for a viewer/game
+```
+
+```
+python analyze\performance.py "<trace folder>"
+python retarget\retarget.py "<trace folder>"                    # raw rig names (what the viewer plays)
+python retarget\retarget.py "<trace folder>" --export cyberpunk  # game dialogue-layer names
+python analyze\analyze.py "<trace folder>"                       # measurements, now including the upper face
+```
+
+## What's recorded per frame
+
+All of it is on the **video's own clock**: `t` is seconds from the trace's start (`clock.video_start`, a time in the video).
+
+| Channel | What it is |
+|---|---|
+| 52 blendshapes | Everything MediaPipe's Face Landmarker gives, in its order: `_neutral`, `browDownLeft` … `noseSneerRight`. Values 0 to 1. |
+| `headYaw`, `headPitch`, `headRoll` | Degrees, from MediaPipe's facial transformation matrix. **Yaw > 0** turns to the subject's own left, **pitch > 0** lifts the chin, **roll > 0** tilts toward the left shoulder. |
+| `headX`, `headY`, `headZ` | Head position in cm, relative to the camera (MediaPipe's face-model space). Not changed by clean-up. |
+| `gazeLeftYaw`, `gazeLeftPitch`, `gazeRightYaw`, `gazeRightPitch` | Degrees per eye, from the `eyeLook*` blendshapes. Yaw > 0 looks toward the subject's left, pitch > 0 looks up. `eyeLook = 1` is taken as 35° sideways and 25° up or down. MediaPipe doesn't publish this scale, so treat it as approximate. |
+| `confidence` | The BlazeFace detector's score for the tracked face (0 to 1). `null` when no face was found, or when the detector model isn't installed. |
+| `faces_in_frame` | How many faces MediaPipe saw (up to 4), whichever one was tracked. |
+
+**Dropped frames are gaps, never zeros.** A frame without the tracked face is `null` in every channel.
+
+## Clean-up
+
+Each step is on by default and can be switched off. The settings used are saved in the file.
+
+| Step | Switch | What it does |
+|---|---|---|
+| One face only | `--no-lock` | Starts on the largest face. After that it follows the face nearest its last position with a similar size, and never jumps to another face elsewhere in the frame. If the face is lost, it's picked up again only near where it was last seen; the search widens a little the longer it's gone. **Only position and size are used, never what the face looks like.** This keeps it tracking-only, but it means a hard cut to a different person filmed at the same spot and size can't be told apart. |
+| Fill short gaps | `--gap 0` (off), `--gap 0.3` | Gaps up to 0.2 s are bridged with straight lines. Longer ones stay `null`. |
+| Neutral calibration | `--no-neutral` | Estimates the person's resting face from their calmest 10% of frames: least expression, least movement. Each blendshape's resting value is subtracted and the rest is rescaled: `(v − rest) / (1 − rest)`. A naturally low brow then doesn't read as a frown. Blink, gaze and `_neutral` are left alone. Head angles become relative to the median head pose, so someone sitting turned toward the camera faces forward. If their head motion over the trace is lopsided, the median shifts it too; `--keep-head-angle` keeps camera-relative angles. The resting values are saved under `neutral`. |
+| One-euro smoothing | `--no-smooth` | The [one-euro filter](https://gery.casiez.net/1euro/) smooths slow movement a lot and fast movement little. Eye channels (blinks, squints, gaze) use fast settings so a 100 ms blink keeps about 90% of its depth (tested). Other channels use calmer settings. |
+
+`--reclean` re-runs only the clean-up from the raw values saved in the file, without tracking again.
+
+## Left and right
+
+**MediaPipe's "Left" is the subject's own left**, not the left of the image. The face rig's `l` is also the character's own left, so the mapping sends Left to `l` with no swap.
+
+How this was checked: renders of a game head were run through MediaPipe, each with one side posed. The rig's left mouth corner raised gave `mouthSmileLeft` 0.62 against `mouthSmileRight` 0.20. The left outer brow raised gave `browOuterUpLeft` +0.20 and nothing on the right. A right blink registered on the right eye (as a squint, because the render's eyes have no irises). The same renders confirmed the head-angle signs: turning the head +20° (character's left) read as +22°, chin-up +15° as +14°, and a +15° tilt toward the left shoulder as +15°.
+
+One limit: if a video was **mirrored** by whoever made it (common with selfie cameras), left and right are swapped in the video itself, and nothing in the picture can tell.
+
+## performance.json
+
+```
+{
+  "format": "lipscan-performance/1",
+  "source": {"url", "title"},
+  "clock": {"video_start": 61.2, "note": ...},
+  "fps": 29.97, "frames": 900, "face_seen": 0.97,
+  "settings": {"lock_face", "fill_gaps_s", "neutral", "neutral_fraction", "smooth", "one_euro": {...}},
+  "conventions": {...},
+  "neutral": {"browDownLeft": 0.21, ...},        // resting values that were subtracted
+  "t": [0.0, 0.0334, ...],                       // seconds from video_start, one per frame
+  "file": ["frames/f000001.jpg", ...],
+  "confidence": [0.97, null, ...],
+  "faces_in_frame": [1, 0, ...],
+  "channels": {"jawOpen": [...], "headYaw": [...], ...},   // cleaned; null = gap
+  "raw": {...}                                              // as tracked, before clean-up
+}
+```
+
+## Retargeting
+
+`export/mediapipe_to_cyberpunk.json` is the mapping. It's meant to be edited. Each MediaPipe blendshape lists the face tracks it drives:
+
+```json
+"browDownLeft": [
+  {"track": "eye_l_brows_lower",        "gain": 1.0, "offset": 0, "clamp": [0, 1]},
+  {"track": "eye_l_brows_lateral",      "gain": 0.6, "offset": 0, "clamp": [0, 1]},
+  {"track": "eye_l_oculi_squint_inner", "gain": 0.3, "offset": 0, "clamp": [0, 1]}
+]
+```
+
+- **Value:** `clamp(gain × source + offset)`. When several sources drive one track, the largest value wins.
+- **Regions:** brows (raise in and out, lower, lateral), eyes (blink, widen, three squints), gaze (all 8 eye-direction poses), cheeks, nose, jaw and lips.
+- **Gaze gains:** these come from the rig itself. Its eye poses turn 40° in or out, 21° up and 30° down at 1.0, measured from the facial setup.
+- **Head:** angles are passed through as degrees in `head`, not as face tracks. The rig's `neck_*` and `head_neck_*` poses only move neck skin and muscles (measured: they don't turn the head bone). In the game, the head turns with the body skeleton. A viewer applies the angles to the Neck, Neck1 and Head bones (30/30/40%).
+- **Tongue:** video can't see the tongue, so by default its tracks come from the audio model run on the trace's own audio and caption words. `--no-tongue` leaves them out.
+
+**Not mapped, and why.** These are listed in the mapping file too; nothing is dropped silently.
+
+| | Why |
+|---|---|
+| `_neutral` | MediaPipe's "no expression" score; there's nothing to drive. |
+| `tongueOut` | MediaPipe doesn't produce it (ARKit does). |
+| Pupils (`eye_*_pupil_wide/narrow`) | MediaPipe doesn't measure pupils. |
+| `nose_*_compress`, `nose_*_breathe_in/out`, `cheek_*_suck`, `jaw_mid_close`, `jaw_mid_shift_back`, `jaw_mid_clench` | No MediaPipe match. |
+| `lips_*_pull`, `lips_*_corner_stretch`, `lips_*_corner_sharp_up`, `lips_mid_shift_up/dn`, `lips_apart_up`, `lips_*_lower_raise` | No clean MediaPipe match; left at rest. |
+| `neck_*`, `head_neck_*`, `ear_*`, `face_gravity_*`, `sculp_*`, sticky-lip tracks | Not expression shapes, or not measurable from video. |
+
+The output is `retarget-cyberpunk.json`: `{"fps": 30, "tracks": {...}, "head": {"yaw", "pitch", "roll"}, "video": {"start", "trace"}}`. Frame 0 is the trace's start, so the trace's `audio.wav` lines up. Frames with no face are `null`.
+
+## In the viewer
+
+The face viewer (built with `claude/skills/cyberpunk-face-viewer`) plays `retarget-cyberpunk.json` in slot A or B:
+
+- head motion, with a **Head motion** switch
+- gaze, through the eye-direction poses
+- grey bands on the timeline where the trace saw no face
+
+Load the trace folder with **Video…** (or `video=<trace folder>/` in the address), and the real frames play in a corner pane in sync with the character.
+
+## Privacy
+
+Tracking, not recognition. `performance.json` holds only:
+- expression values
+- head pose
+- gaze
+- a detection score
+- frame times and file names
+
+It never stores face points (MediaPipe's 478-point mesh is used in memory and thrown away), face prints, identity embeddings, or anything that could recognise a person.

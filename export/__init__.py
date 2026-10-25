@@ -39,6 +39,26 @@ ARKIT_FROM_RIG = {
     "noseSneerRight": ("max", ["nose_r_snear"]),
     "eyeBlinkLeft": ("max", ["eye_l_blink"]),
     "eyeBlinkRight": ("max", ["eye_r_blink"]),
+    # upper face (0.2.0). Sides: ARKit's Left and the rig's l are both the character's own left.
+    "browInnerUp": ("avg", ["eye_l_brows_raise_in", "eye_r_brows_raise_in"]),
+    "browOuterUpLeft": ("max", ["eye_l_brows_raise_out"]),
+    "browOuterUpRight": ("max", ["eye_r_brows_raise_out"]),
+    "browDownLeft": ("max", ["eye_l_brows_lower"]),
+    "browDownRight": ("max", ["eye_r_brows_lower"]),
+    "eyeSquintLeft": ("max", ["eye_l_oculi_squint_inner", "eye_l_oculi_squint_outer_upper"]),
+    "eyeSquintRight": ("max", ["eye_r_oculi_squint_inner", "eye_r_oculi_squint_outer_upper"]),
+    "cheekSquintLeft": ("max", ["eye_l_oculi_squint_outer_lower", "lips_l_nasolabialDeepener"]),
+    "cheekSquintRight": ("max", ["eye_r_oculi_squint_outer_lower", "lips_r_nasolabialDeepener"]),
+    "eyeWideLeft": ("max", ["eye_l_widen"]),
+    "eyeWideRight": ("max", ["eye_r_widen"]),
+    "eyeLookDownLeft": ("max", ["eye_l_dir_dn"]),
+    "eyeLookDownRight": ("max", ["eye_r_dir_dn"]),
+    "eyeLookUpLeft": ("max", ["eye_l_dir_up"]),
+    "eyeLookUpRight": ("max", ["eye_r_dir_up"]),
+    "eyeLookInLeft": ("max", ["eye_l_dir_in"]),
+    "eyeLookInRight": ("max", ["eye_r_dir_in"]),
+    "eyeLookOutLeft": ("max", ["eye_l_dir_out"]),
+    "eyeLookOutRight": ("max", ["eye_r_dir_out"]),
 }
 
 

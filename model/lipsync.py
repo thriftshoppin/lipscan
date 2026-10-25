@@ -1,5 +1,6 @@
 """
-LipScan model: turns a voice recording (WAV) into per-frame mouth animation curves.
+LipScan model: turns a voice recording (WAV) into per-frame face animation curves: the mouth, and (with a profile
+that has an "upper_face" section) blinks, brows, squints, gaze and small head nods driven by the voice.
 
 How the jaw, lips and tongue move is set by a PROFILE (profiles/*.json): the loudness-to-jaw curve, how far the
 mouth runs ahead of the sound, opening and closing speeds, and so on. The first two profiles were measured from
@@ -15,7 +16,9 @@ No add-ons needed: plain Python 3.8+.
     python lipsync.py vocal.wav --profile singing-cyberpunk --out song.json
     python lipsync.py clip.wav --words words.json --export arkit52 --out clip.json   # [[0.42, "maybe"], ...]
 
-Output: JSON {"fps": 30, "profile": ..., "tracks": {"jaw_mid_open": [...], ...}}.
+Output: JSON {"fps": 30, "profile": ..., "tracks": {"jaw_mid_open": [...], ...}, "head": {"pitch": [...], ...}}.
+"head" holds head angles in degrees (pitch > 0 = chin up, yaw > 0 = toward the character's left), when the profile
+asks for head motion.
 The model's own track names are those of the REDengine face rig the first profiles were measured on (it has tongue
 tracks, which ARKit lacks). --export arkit52 converts them to the 52 ARKit blendshape names; --export cyberpunk
 gives the game's dialogue-layer names. See export/.
@@ -346,6 +349,195 @@ def diction_tracks(placed, n, cfg, fps=FPS):
 
 
 # ----------------------------------------------------------------------------
+# Upper face from the voice: blinks, brows, squints, gaze, head nods
+# ----------------------------------------------------------------------------
+def pitch_track(samples, rate, n, fps=FPS):
+    """Voice pitch per frame in semitones above 100 Hz (None where unvoiced). Autocorrelation on audio cut down
+    to about 8 kHz; uses numpy when it's installed (much faster), plain Python otherwise."""
+    step = max(1, rate // 8000)
+    x = samples[::step] if step > 1 else samples
+    r = rate / step
+    win, lo, hi = int(r * 0.04), int(r / 400), int(r / 60)
+    out = [None] * n
+    try:
+        import numpy as np
+        xa = np.asarray(x, dtype=float)
+    except ImportError:
+        np = None
+    for f in range(n):
+        a = int(f * r / fps)
+        if np is not None:
+            seg = xa[a:a + win]
+            if len(seg) < win or float(np.sqrt((seg ** 2).mean())) < 0.01:
+                continue
+            seg = seg - seg.mean()
+            ac = np.correlate(seg, seg, "full")[win - 1:]
+            k = lo + int(np.argmax(ac[lo:hi]))
+            ok = ac[0] > 0 and ac[k] / ac[0] > 0.4
+        else:
+            seg = x[a:a + win]
+            if len(seg) < win or math.sqrt(sum(v * v for v in seg) / win) < 0.01:
+                continue
+            m = sum(seg) / win
+            seg = [v - m for v in seg]
+            e0 = sum(v * v for v in seg)
+            best, k = -1.0, lo
+            for lag in range(lo, hi, 2):                     # every other lag: close enough, twice as fast
+                c = sum(seg[i] * seg[i + lag] for i in range(win - lag))
+                if c > best:
+                    best, k = c, lag
+            ok = e0 > 0 and best / e0 > 0.4
+        if ok:
+            out[f] = 12 * math.log2(r / k / 100)
+    return out
+
+
+def gesture(n, centre, attack, hold, release, peak):
+    """A raise-hold-relax curve (frames), as {frame: value}."""
+    out = {}
+    start = centre - attack
+    for f in range(max(0, start), min(n, centre + hold + release + 1)):
+        if f < centre:
+            v = (f - start + 1) / max(1, attack)
+        elif f <= centre + hold:
+            v = 1.0
+        else:
+            v = 1 - (f - centre - hold) / max(1, release)
+        if v > 0:
+            out[f] = peak * (0.5 - 0.5 * math.cos(math.pi * min(1.0, v)))    # eased
+    return out
+
+
+def upper_face(db, samples, rate, cfg, seed, fps=FPS):
+    """Tracks and head angles for the upper face, from the voice alone. Settings: the profile's "upper_face"."""
+    u = cfg["upper_face"]
+    n = len(db)
+    rnd = random.Random(seed)
+    ms = lambda x: max(1, round(x * fps / 1000))
+    voiced_db = cfg["normalize_to_db"] - 30
+    voiced = [d > voiced_db for d in db]
+    loud = [max(0.0, min(1.0, (d - voiced_db) / 30)) for d in db]          # 0 at the voicing floor, 1 at the loud end
+    pitch = pitch_track(samples, rate, n, fps) if u.get("pitch_weight") else [None] * n
+    heard = sorted(p for p in pitch if p is not None)
+    centre = heard[len(heard) // 2] if heard else 0.0
+    prel = [0.0 if p is None else max(-1.0, min(1.0, (p - centre) / 6)) for p in pitch]   # +-6 semitones -> +-1
+    emph = [(loud[f] + u.get("pitch_weight", 0) * prel[f]) if voiced[f] else 0.0 for f in range(n)]
+
+    tracks = {}
+    head = {"pitch": [0.0] * n, "yaw": [0.0] * n, "roll": [0.0] * n}
+
+    # Brow raises: on the strongest syllables, a short raise-and-relax gesture
+    peaks, _ = loudness_peaks(db, voiced_db)
+    ranked = sorted(peaks, key=lambda f: -emph[f])
+    want = max(1 if ranked else 0, round(u["brow_raises_per_minute"] * n / fps / 60))
+    events = []
+    for f in ranked:
+        if len(events) >= want or emph[f] < u["brow_raise_threshold"]:
+            break
+        if all(abs(f - e) >= u["brow_min_gap_s"] * fps for e in events):
+            events.append(f)
+    raise_ = [0.0] * n
+    top = max((emph[f] for f in events), default=1.0) or 1.0
+    for f in events:
+        # the brows stay up while the stressed phrase stays loud (up to brow_follow_s)
+        hold, end = ms(u["brow_hold_ms"]), min(n, f + round(u.get("brow_follow_s", 0) * fps))
+        while f + hold < end and loud[f + hold] > 0.6 * loud[f]:
+            hold += 1
+        g = gesture(n, f - ms(u["brow_lead_ms"]), ms(u["brow_attack_ms"]), hold, ms(u["brow_release_ms"]),
+                    u["brow_raise_peak"] * (0.6 + 0.4 * emph[f] / top))
+        for k, v in g.items():
+            raise_[k] = max(raise_[k], v)
+    if any(raise_):
+        for side in "lr":
+            tracks[f"eye_{side}_brows_raise_in"] = raise_
+            tracks[f"eye_{side}_brows_raise_out"] = raise_
+
+    # Frown: brows lower and eyes narrow a little ahead of loud stretches (speech: low-pitched ones; singing: effortful
+    # ones, on top of a steady base); not while the brows are up
+    if u.get("frown_level"):
+        lead = ms(u["frown_lead_ms"])
+        if u.get("frown_drive") == "effort":
+            src = [max(0.0, (v - 0.6) / 0.4) ** 2 for v in loud]
+            drive = [src[min(n - 1, f + lead)] for f in range(n)]
+        else:
+            drive = [loud[min(n - 1, f + lead)] * (1.0 if prel[min(n - 1, f + lead)] <= 0 else 0.4) for f in range(n)]
+        slow = dict(cfg, attack_ms=u["frown_attack_ms"], release_ms=u["frown_release_ms"], max_open_speed=99, max_close_speed=99)
+        frown = smooth(drive, slow, fps)
+        base = u.get("frown_base", 0.0)
+        frown = [min(1.0, base + u["frown_level"] * v) * (1 - min(1.0, r / max(1e-6, u["brow_raise_peak"]))) for v, r in zip(frown, raise_)]
+        for side in "lr":
+            for name in ("brows_lower", "brows_lateral", "oculi_squint_inner", "oculi_squint_outer_upper", "oculi_squint_outer_lower"):
+                tracks[f"eye_{side}_{name}"] = frown
+
+    # Effort (singing, shouting): squint and cheek raise on loud passages
+    if u.get("loud_squint") or u.get("loud_cheek"):
+        slow = dict(cfg, attack_ms=150, release_ms=400, max_open_speed=99, max_close_speed=99)
+        effort = smooth([max(0.0, (v - 0.6) / 0.4) ** 2 for v in loud], slow, fps)
+        for side in "lr":
+            if u.get("loud_squint"):
+                t = tracks.get(f"eye_{side}_oculi_squint_outer_lower", [0.0] * n)
+                tracks[f"eye_{side}_oculi_squint_outer_lower"] = [min(1.0, a + u["loud_squint"] * e) for a, e in zip(t, effort)]
+            if u.get("loud_cheek"):
+                tracks[f"lips_{side}_nasolabialDeepener"] = [u["loud_cheek"] * e for e in effort]
+
+    # Blinks: like the game, in the middle of each pause between phrases; during long stretches of speech without
+    # a pause, extra blinks at about blinks_per_minute, on weak syllables
+    if u.get("blinks_per_minute"):
+        shape = [v * u["blink_peak"] for v in (0.15, 0.8, 1.0, 0.9, 0.45, 0.2, 0.1)]
+        speaking = [d > cfg["normalize_to_db"] - 25 for d in db]
+        first = speaking.index(True) if any(speaking) else n
+        last = n - 1 - speaking[::-1].index(True) if any(speaking) else -1
+        at, f = [], first
+        while f <= last:                                                # pauses inside the speech
+            if not speaking[f]:
+                k = f
+                while k <= last and not speaking[k]:
+                    k += 1
+                if (k - f) / fps >= u["blink_pause_min_s"]:
+                    at.append((f + k) // 2)
+                f = k
+            else:
+                f += 1
+        longest = u.get("blink_max_gap_s") or 60 / u["blinks_per_minute"] * 1.3
+        edges = [first] + at + [last]
+        for a, b in zip(edges, edges[1:]):                              # long stretches: add blinks
+            extra = int((b - a) / fps // longest)
+            for j in range(extra):
+                c = a + (b - a) * (j + 1) // (extra + 1) + rnd.randint(-fps // 3, fps // 3)
+                near = range(max(a + 3, c - 6), min(b - 3, c + 7))
+                if near:
+                    at.append(min(near, key=lambda k: emph[k]))         # the weakest moment nearby
+        blink = [0.0] * n
+        for c in sorted(at):
+            for k, v in enumerate(shape):
+                if 0 <= c - 2 + k < n:
+                    blink[c - 2 + k] = max(blink[c - 2 + k], v)
+        tracks["eye_l_blink"] = tracks["eye_r_blink"] = blink
+
+    # Gaze: the game's dialogue eyes rest slightly downward
+    if u.get("gaze_down"):
+        tracks["eye_l_dir_dn"] = tracks["eye_r_dir_dn"] = [u["gaze_down"]] * n
+
+    # Head: a small nod (chin dips, then returns) on stressed syllables, and a slow sway
+    if u.get("head_nod_deg") and peaks:
+        nods = sorted(peaks, key=lambda f: -emph[f])[:max(1, round(u["head_nods_per_minute"] * n / fps / 60))]
+        for f in nods:
+            if emph[f] < u["brow_raise_threshold"]:
+                continue
+            for k, v in gesture(n, f, ms(90), 0, ms(320), u["head_nod_deg"] * min(1.0, emph[f])).items():
+                head["pitch"][k] = min(head["pitch"][k], -v)
+    if u.get("head_sway_deg"):
+        a1, a2, a3 = (rnd.uniform(0, 6.3) for _ in range(3))
+        for f in range(n):
+            t = f / fps
+            head["yaw"][f] += u["head_sway_deg"] * math.sin(0.37 * t * 6.283 + a1)
+            head["roll"][f] += 0.5 * u["head_sway_deg"] * math.sin(0.23 * t * 6.283 + a2)
+            head["pitch"][f] += 0.4 * u["head_sway_deg"] * math.sin(0.29 * t * 6.283 + a3)
+    head = {k: v for k, v in head.items() if any(abs(x) > 1e-6 for x in v)}
+    return tracks, head
+
+
+# ----------------------------------------------------------------------------
 # Main entry point
 # ----------------------------------------------------------------------------
 def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None):
@@ -370,7 +562,12 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None):
         for name in list(tracks):
             if name.startswith("lips_r_"):
                 tracks[name] = [v * (0.9 + 0.1 * math.sin(f / FPS * 0.7)) for f, v in enumerate(tracks[name])]
-    if cfg["blinks_per_minute"]:
+    head = {}
+    if cfg.get("upper_face"):
+        upper, head = upper_face(db, samples, rate, cfg, seed)
+        for name, v in upper.items():
+            tracks[name] = [max(a, b) for a, b in zip(tracks.get(name, [0.0] * n), v)]
+    elif cfg.get("blinks_per_minute"):                   # profiles from before 0.2.0: blinks only
         rnd, blink = random.Random(seed), [0.0] * n
         f = rnd.randint(0, FPS)
         while f < n:
@@ -379,8 +576,11 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None):
                     blink[f + k] = v
             f += int(rnd.expovariate(cfg["blinks_per_minute"] / 60) * FPS) + 6
         tracks["eye_l_blink"] = tracks["eye_r_blink"] = blink
-    return {"fps": FPS, "profile": cfg.get("name", "custom"), "duration": n / FPS,
-            "tracks": {k: [round(v, 4) for v in vals] for k, vals in sorted(tracks.items())}}
+    out = {"fps": FPS, "profile": cfg.get("name", "custom"), "duration": n / FPS,
+           "tracks": {k: [round(v, 4) for v in vals] for k, vals in sorted(tracks.items())}}
+    if head:
+        out["head"] = {k: [round(v, 2) for v in vals] for k, vals in head.items()}
+    return out
 
 
 def preview(result, names=("jaw_mid_open", "lips_together_up", "lips_l_purse", "tongue_mid_lift", "lips_suck_dn"), step=2):

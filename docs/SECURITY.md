@@ -43,6 +43,28 @@ LipScan's capture part can see video in your browser, so it's built to do as lit
 
 LipScan tracks facial motion. It doesn't identify people, build face prints or compare faces. Recordings and measurements stay on your PC unless you share them.
 
+**What the analysis saves, and what it doesn't.** Since 0.2.0, `analyze/performance.py` records the whole face. `performance.json` holds only:
+
+- expression values: the 52 MediaPipe blendshapes, 0 to 1
+- head pose: three angles, plus position in cm relative to the camera
+- gaze angles per eye
+- a face-detection score
+- how many faces were in the frame
+- frame times and file names
+
+It **never** stores:
+
+- MediaPipe's 478-point face mesh or any other face points (they're used in memory and thrown away)
+- face crops
+- face prints, identity embeddings or any other per-person signature
+- anything that could be used to recognise or match a person
+
+`face-30fps.json` (the mouth analysis) adds two normalised mouth distances, lip gap and mouth width, divided by eye distance. They are expression measures, not identifiers.
+
+**One face only, without recognising anyone.** The face lock picks the main face by position and size only. It never compares faces, so it can't tell two people apart. That's deliberate.
+
+Profiles and measurements are averages (rates, timings, curve shapes). They describe how someone moves, not who they are. The trace folder itself does contain the video frames you recorded; treat it like the video.
+
 ## Reporting a problem
 
 Please open a GitHub issue, or use GitHub's private vulnerability reporting for anything sensitive.

@@ -6,7 +6,8 @@
     "close_lead_ms": "singers start closing well before a note ends",
     "release_ms": "held notes let go slowly",
     "viseme_strength": "sung vowels dominate; consonants are lighter",
-    "symmetric": "motion capture is a little lopsided"
+    "symmetric": "motion capture is a little lopsided",
+    "upper_face": "voice-driven blinks, brows, squints, gaze and head (see docs/PROFILES.md)"
   },
   "jaw_mean": {
     "-60": 0.03,
@@ -63,5 +64,50 @@
   "shape_attack_ms": 40,
   "shape_release_ms": 60,
   "symmetric": false,
-  "blinks_per_minute": 18.3
+  "upper_face": {
+    "notes": {
+      "blinks_per_minute": "average blink rate",
+      "blink_peak": "how far a blink closes the lids (0..1)",
+      "blink_in_pause": "share of blinks moved into the nearest pause (within 0.7 s)",
+      "blink_min_gap_s": "shortest time between blinks",
+      "brow_raises_per_minute": "most brow raises per minute, on the strongest syllables",
+      "brow_raise_threshold": "a syllable needs at least this emphasis (loudness 0..1 + pitch) to raise the brows",
+      "brow_raise_peak": "brow raise strength",
+      "brow_lead_ms / brow_attack_ms / brow_hold_ms / brow_release_ms": "brow raise timing around the syllable",
+      "brow_min_gap_s": "shortest time between brow raises",
+      "pitch_weight": "how much pitch (vs loudness) counts as emphasis; 0 skips pitch tracking",
+      "frown_level": "brows lower and eyes narrow up to this much on loud, low-pitched stretches",
+      "frown_lead_ms / frown_attack_ms / frown_release_ms": "frown timing (it leads the voice)",
+      "loud_squint / loud_cheek": "squint and cheek raise on loud passages (effort, singing)",
+      "gaze_down": "eyes rest this far down (eye_*_dir_dn)",
+      "head_nod_deg / head_nods_per_minute": "chin dips on stressed syllables",
+      "head_sway_deg": "slow head sway"
+    },
+    "blinks_per_minute": 18.7,
+    "blink_peak": 0.9,
+    "blink_pause_min_s": 0.4,
+    "blink_max_gap_s": 3.5,
+    "brow_raises_per_minute": 3,
+    "brow_raise_threshold": 0.8,
+    "brow_raise_peak": 0.2,
+    "brow_lead_ms": 100,
+    "brow_attack_ms": 200,
+    "brow_hold_ms": 200,
+    "brow_release_ms": 400,
+    "brow_follow_s": 0,
+    "brow_min_gap_s": 4,
+    "pitch_weight": 0.3,
+    "frown_drive": "effort",
+    "frown_base": 0.4,
+    "frown_level": 0.8,
+    "frown_lead_ms": 500,
+    "frown_attack_ms": 1500,
+    "frown_release_ms": 3000,
+    "loud_squint": 0.25,
+    "loud_cheek": 0.2,
+    "gaze_down": 0.27,
+    "head_nod_deg": 2.5,
+    "head_nods_per_minute": 20,
+    "head_sway_deg": 1.5
+  }
 }

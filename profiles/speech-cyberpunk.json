@@ -18,7 +18,7 @@
     "viseme_strength": "scales all diction shapes",
     "shape_lead_ms": "diction shapes run this far ahead of the sound",
     "symmetric": "true = left and right always match (game dialogue does)",
-    "blinks_per_minute": "0 leaves blinks to other systems"
+    "upper_face": "voice-driven blinks, brows, squints, gaze and head (see docs/PROFILES.md)"
   },
   "jaw_mean": {
     "-60": 0.03,
@@ -64,5 +64,48 @@
   "shape_attack_ms": 25,
   "shape_release_ms": 35,
   "symmetric": true,
-  "blinks_per_minute": 0
+  "upper_face": {
+    "notes": {
+      "blinks_per_minute": "average blink rate",
+      "blink_peak": "how far a blink closes the lids (0..1)",
+      "blink_in_pause": "share of blinks moved into the nearest pause (within 0.7 s)",
+      "blink_min_gap_s": "shortest time between blinks",
+      "brow_raises_per_minute": "most brow raises per minute, on the strongest syllables",
+      "brow_raise_threshold": "a syllable needs at least this emphasis (loudness 0..1 + pitch) to raise the brows",
+      "brow_raise_peak": "brow raise strength",
+      "brow_lead_ms / brow_attack_ms / brow_hold_ms / brow_release_ms": "brow raise timing around the syllable",
+      "brow_min_gap_s": "shortest time between brow raises",
+      "pitch_weight": "how much pitch (vs loudness) counts as emphasis; 0 skips pitch tracking",
+      "frown_level": "brows lower and eyes narrow up to this much on loud, low-pitched stretches",
+      "frown_lead_ms / frown_attack_ms / frown_release_ms": "frown timing (it leads the voice)",
+      "loud_squint / loud_cheek": "squint and cheek raise on loud passages (effort, singing)",
+      "gaze_down": "eyes rest this far down (eye_*_dir_dn)",
+      "head_nod_deg / head_nods_per_minute": "chin dips on stressed syllables",
+      "head_sway_deg": "slow head sway"
+    },
+    "blinks_per_minute": 18.3,
+    "blink_peak": 0.85,
+    "blink_pause_min_s": 0.3,
+    "blink_max_gap_s": 3.5,
+    "brow_raises_per_minute": 8,
+    "brow_raise_threshold": 0.6,
+    "brow_raise_peak": 0.5,
+    "brow_lead_ms": 100,
+    "brow_attack_ms": 150,
+    "brow_hold_ms": 100,
+    "brow_release_ms": 300,
+    "brow_follow_s": 0,
+    "brow_min_gap_s": 1.5,
+    "pitch_weight": 0.3,
+    "frown_level": 0.15,
+    "frown_lead_ms": 300,
+    "frown_attack_ms": 400,
+    "frown_release_ms": 600,
+    "loud_squint": 0,
+    "loud_cheek": 0,
+    "gaze_down": 0.1,
+    "head_nod_deg": 1.5,
+    "head_nods_per_minute": 12,
+    "head_sway_deg": 0.8
+  }
 }

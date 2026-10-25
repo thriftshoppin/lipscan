@@ -18,7 +18,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { EventEmitter } = require("node:events");
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 const log = (...a) => process.stderr.write(`[lipscan] ${a.join(" ")}\n`);
 console.log = console.error; // a stray console.log must never corrupt the MCP stream on stdout

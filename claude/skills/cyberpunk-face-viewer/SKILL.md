@@ -102,6 +102,16 @@ There are three parts: `Face`, `Tongue` and `Eyes`. For each part:
 6. **Local bone transform** = (rest translation + translation offset, rest rotation × rotation offset). Chain through the parents for world matrices W, and keep the rest world matrices W0.
 7. **Deformation** per bone, in glTF axes: D = C · W · W0⁻¹ · C⁻¹, where C maps (x,y,z) to (x,z,−y).
 
+**Head motion (LipScan 0.2.0 curve files carry `head`: yaw, pitch, roll in degrees).**
+- **Rig frame:** the character faces +Y, +Z is up, and the character's left is −X.
+- **Direction conventions:**
+  - yaw > 0 turns toward the character's left: about +Z
+  - pitch > 0 lifts the chin: about +X
+  - roll > 0 tilts toward the left shoulder: about −Y
+- **One rotation:** build q = Rz(yaw) · Rx(pitch) · Ry(−roll). In three.js that's `Euler(pitch, −roll, yaw, "ZXY")`.
+- **Share it out:** split it over `Neck`, `Neck1` and `Head` (30/30/40%, or the file's `head_split`). For each of those bones, after the poses, multiply its rotation offset by W0rotᵢ⁻¹ · slerp(identity, q, shareᵢ) · W0rotᵢ.
+- **Not the rig's neck poses:** the face rig's own `neck_*` and `head_neck_*` poses don't turn the head (they move neck skin), so don't use them for head motion.
+
 ## Putting it on the meshes
 - WolvenKit's mesh glTF has a **flat skeleton**: every joint is a direct child of `Armature`, positioned at its world rest location, and all joints share one orientation. The inverse-bind matrices match that.
 - For each joint whose name is in the rig, set its world matrix to D · R, where R is the joint's exported rest matrix **with its position replaced by the rig's rest position** (C applied to W0's translation). In three.js: `bone.matrixAutoUpdate = false`, and `bone.matrix = parentWorld⁻¹ · D · R`.
@@ -119,6 +129,16 @@ There are three parts: `Face`, `Tongue` and `Eyes`. For each part:
   - an audio offset in ms; the audio is the clock while it plays
 - **Views:** A, B, or A and B side by side, as two head instances 0.26 m apart.
 - **Extras:** an "active tracks" list (the strongest main poses), a pose tester (pick any posed track and drag 0–1), eyebrow/eye/teeth/wireframe toggles, and a front-camera button.
+- **Whole face (LipScan 0.2.0):**
+  - a **Head motion** switch, applying the curve file's `head` as above
+  - gaps: `null` values in a curve file mean the video trace saw no face. Draw rest there, and grey those stretches on the timeline.
+  - a **Video…** button (or drop a trace folder) that reads a LipScan trace's `trace.json` and `frames/`, and shows the frame nearest `video.start + t` in a corner pane, in sync
+  - file names shown on the A, B, Audio and Video buttons, so the user can see what loaded
+- **Address parameters (when served over http):**
+  - `pack`, `a`, `b`, `audio`, `video`
+  - `clip` or `clipA`, and `clipB`: match the exact clip name, the bare id without `f_`/`m_`, or the dropdown label with "(x.xx s)"
+  - `view`: `a`, `b` or `ab`, in any case
+  - `t`, `head=0`, `cam=front`
 - **Build:** bundle three.js (MIT) and the app into **one HTML file** (esbuild, IIFE, inlined), so it opens from disk with no server. For an app-like window on Windows: `msedge.exe --app="file:///.../viewer.html"`.
 
 ## Checks before handing it over
@@ -126,6 +146,7 @@ There are three parts: `Face`, `Tongue` and `Eyes`. For each part:
 - `lips_together_dn` = 1: the lower lip rises cleanly to meet the upper one.
 - A game dialogue clip played with its voice: the mouth closes on p/b/m and opens on the vowels.
 - A LipScan curve file for the same line, in slot B, side by side: the timing and shapes are comparable.
+- Head motion: yaw +20 turns the face toward the character's left (the viewer's right, from the front). Pitch +15 lifts the chin. Roll +15 tilts the top of the head toward the character's left shoulder.
 - Not checked against the game itself: exact tongue placement, and the refinements listed under "Not used by the basic solver". Say so if asked.
 
 ## Privacy reminders for the user

@@ -1,0 +1,814 @@
+{
+ "format": "lipscan-mapping/1",
+ "about": "MediaPipe blendshapes (from analyze/performance.py) -> Cyberpunk 2077 face-rig tracks. Edit freely: each source lists the tracks it drives, value = clamp(gain x source + offset). When several sources drive one track, the largest value wins. Sides: MediaPipe's Left and the rig's l are both the character's own left.",
+ "combine": "max",
+ "map": {
+  "browDownLeft": [
+   {
+    "track": "eye_l_brows_lower",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "eye_l_brows_lateral",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "eye_l_oculi_squint_inner",
+    "gain": 0.3,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "browDownRight": [
+   {
+    "track": "eye_r_brows_lower",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "eye_r_brows_lateral",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "eye_r_oculi_squint_inner",
+    "gain": 0.3,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "browInnerUp": [
+   {
+    "track": "eye_l_brows_raise_in",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "eye_r_brows_raise_in",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "browOuterUpLeft": [
+   {
+    "track": "eye_l_brows_raise_out",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "browOuterUpRight": [
+   {
+    "track": "eye_r_brows_raise_out",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeBlinkLeft": [
+   {
+    "track": "eye_l_blink",
+    "gain": 1.2,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeBlinkRight": [
+   {
+    "track": "eye_r_blink",
+    "gain": 1.2,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeSquintLeft": [
+   {
+    "track": "eye_l_oculi_squint_inner",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "eye_l_oculi_squint_outer_lower",
+    "gain": 0.8,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "eye_l_oculi_squint_outer_upper",
+    "gain": 0.4,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeSquintRight": [
+   {
+    "track": "eye_r_oculi_squint_inner",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "eye_r_oculi_squint_outer_lower",
+    "gain": 0.8,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "eye_r_oculi_squint_outer_upper",
+    "gain": 0.4,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeWideLeft": [
+   {
+    "track": "eye_l_widen",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeWideRight": [
+   {
+    "track": "eye_r_widen",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeLookUpLeft": [
+   {
+    "track": "eye_l_dir_up",
+    "gain": 1.19,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeLookUpRight": [
+   {
+    "track": "eye_r_dir_up",
+    "gain": 1.19,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeLookDownLeft": [
+   {
+    "track": "eye_l_dir_dn",
+    "gain": 0.833,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeLookDownRight": [
+   {
+    "track": "eye_r_dir_dn",
+    "gain": 0.833,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeLookInLeft": [
+   {
+    "track": "eye_l_dir_in",
+    "gain": 0.875,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeLookInRight": [
+   {
+    "track": "eye_r_dir_in",
+    "gain": 0.875,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeLookOutLeft": [
+   {
+    "track": "eye_l_dir_out",
+    "gain": 0.875,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "eyeLookOutRight": [
+   {
+    "track": "eye_r_dir_out",
+    "gain": 0.875,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "cheekPuff": [
+   {
+    "track": "cheek_l_puff",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "cheek_r_puff",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_puff_up",
+    "gain": 0.5,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_puff_dn",
+    "gain": 0.5,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "cheekSquintLeft": [
+   {
+    "track": "eye_l_oculi_squint_outer_lower",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_l_nasolabialDeepener",
+    "gain": 0.5,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "cheekSquintRight": [
+   {
+    "track": "eye_r_oculi_squint_outer_lower",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_r_nasolabialDeepener",
+    "gain": 0.5,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "noseSneerLeft": [
+   {
+    "track": "nose_l_snear",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_l_upper_raise",
+    "gain": 0.3,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "noseSneerRight": [
+   {
+    "track": "nose_r_snear",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_r_upper_raise",
+    "gain": 0.3,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "jawOpen": [
+   {
+    "track": "jaw_mid_open",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "jawForward": [
+   {
+    "track": "jaw_mid_shift_fwd",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "jawLeft": [
+   {
+    "track": "jaw_mid_shift_l",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "jawRight": [
+   {
+    "track": "jaw_mid_shift_r",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthClose": [
+   {
+    "track": "lips_together_up",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_together_dn",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthFunnel": [
+   {
+    "track": "lips_l_funnel",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_r_funnel",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthPucker": [
+   {
+    "track": "lips_l_purse",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_r_purse",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthLeft": [
+   {
+    "track": "lips_mid_shift_l",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthRight": [
+   {
+    "track": "lips_mid_shift_r",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthSmileLeft": [
+   {
+    "track": "lips_l_corner_up",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_l_corner_wide",
+    "gain": 0.3,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthSmileRight": [
+   {
+    "track": "lips_r_corner_up",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_r_corner_wide",
+    "gain": 0.3,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthFrownLeft": [
+   {
+    "track": "lips_l_corner_dn",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthFrownRight": [
+   {
+    "track": "lips_r_corner_dn",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthDimpleLeft": [
+   {
+    "track": "lips_l_corner_wide",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthDimpleRight": [
+   {
+    "track": "lips_r_corner_wide",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthStretchLeft": [
+   {
+    "track": "lips_l_stretch",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthStretchRight": [
+   {
+    "track": "lips_r_stretch",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthPressLeft": [
+   {
+    "track": "lips_tighten_up",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_tighten_dn",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthPressRight": [
+   {
+    "track": "lips_tighten_up",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_tighten_dn",
+    "gain": 0.6,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthRollLower": [
+   {
+    "track": "lips_suck_dn",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthRollUpper": [
+   {
+    "track": "lips_suck_up",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthShrugLower": [
+   {
+    "track": "lips_chin_raise",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthShrugUpper": [
+   {
+    "track": "lips_l_upper_raise",
+    "gain": 0.4,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "track": "lips_r_upper_raise",
+    "gain": 0.4,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthLowerDownLeft": [
+   {
+    "track": "lips_apart_dn",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthLowerDownRight": [
+   {
+    "track": "lips_apart_dn",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthUpperUpLeft": [
+   {
+    "track": "lips_l_upper_raise",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "mouthUpperUpRight": [
+   {
+    "track": "lips_r_upper_raise",
+    "gain": 1.0,
+    "offset": 0.0,
+    "clamp": [
+     0.0,
+     1.0
+    ]
+   }
+  ]
+ },
+ "head": {
+  "about": "Head pose is passed through as angles (degrees), not as face tracks: the rig's neck_* and head_neck_* poses only move neck skin and muscles; in the game the head turns with the body skeleton. The viewer applies these angles to the Neck, Neck1 and Head bones.",
+  "gain": {
+   "yaw": 1.0,
+   "pitch": 1.0,
+   "roll": 1.0
+  },
+  "limit_deg": {
+   "yaw": 45,
+   "pitch": 30,
+   "roll": 25
+  },
+  "split": {
+   "Neck": 0.3,
+   "Neck1": 0.3,
+   "Head": 0.4
+  }
+ },
+ "unmapped_sources": {
+  "_neutral": "MediaPipe's 'no expression' score; nothing to drive.",
+  "tongueOut": "not produced by MediaPipe (ARKit has it); tongue tracks come from the audio model instead (retarget --tongue)."
+ },
+ "unmapped_tracks": {
+  "eye_l_pupil_wide / eye_r_pupil_wide / eye_l_pupil_narrow / eye_r_pupil_narrow": "MediaPipe doesn't measure pupils.",
+  "tongue_*": "no tongue in video tracking; filled from the audio model when retarget --tongue is on.",
+  "nose_*_compress, nose_*_breathe_in/out": "no MediaPipe match.",
+  "lips_*_pull, lips_*_corner_stretch, lips_*_corner_sharp_up, lips_mid_shift_up/dn, lips_apart_up, lips_*_lower_raise": "no clean MediaPipe match; left at rest.",
+  "cheek_*_suck, jaw_mid_close, jaw_mid_shift_back, jaw_mid_clench": "no MediaPipe match.",
+  "neck_*, head_neck_*, ear_*, face_gravity_*, sculp_*, lips_*sticky*": "not expression shapes (or not measurable from video)."
+ }
+}
