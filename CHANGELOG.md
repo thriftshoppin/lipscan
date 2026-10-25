@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.4 (2026-10-25)
+
+First live test on a real video (a talking-head YouTube clip), and a hybrid retarget.
+
+- **Finding:** a small face in a 640 px frame gives a weak mouth reading. The tracked jaw was about 2.3 times too small (90th percentile 0.13 against the game's 0.30), and matched the voice at only 0.31–0.42, against 0.95 for the voice model. A raw lip-distance measure was no better (0.31).
+- **Hybrid retarget, now the default:** `retarget.py` takes the jaw, lip shapes, tongue and neck from the voice model, because the voice is what drives them, and everything else from the video. That covers head, brows, blinks, gaze, cheeks, nose, smiles and frowns, which the voice can't know.
+  - **Wide-open mouths:** the jaw also takes the video wherever the video shows the mouth open further than the voice suggests (laughing, shouting).
+  - **No face tracked:** the video tracks go empty there, and the voice tracks carry on.
+  - **`--video-only`** reads the mouth from the video, as before.
+  - **Words:** with caption words (YouTube's auto-captions), the voice side also places p/b/m closures and lip shapes. Without them it gives jaw, tongue and neck only.
+- **Tests:** 4 new checks, 52 in test_performance.py.
+
 ## 0.2.3 (2026-10-25)
 
 A tongue that moves like a tongue, and lips that aren't rigid.

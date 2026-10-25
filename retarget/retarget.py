@@ -82,6 +82,57 @@ def head_curves(channels, mapping):
     return out
 
 
+# Tracks that speech drives (jaw, lip shapes, tongue, neck). A hybrid takes these from the voice model, because a
+# small or turned face in a video gives a weak mouth reading (jaw ~2x too small, correlation with the voice 0.3-0.4,
+# against 0.9+ for the voice model), and everything else (head, brows, eyes, blinks, gaze, cheeks, nose, smiles and
+# frowns) from the video, which the voice can't know.
+SPEECH_PREFIXES = ("tongue_", "neck_throat", "neck_tighten", "neck_l_platysma", "neck_r_platysma", "neck_l_stern", "neck_r_stern")
+SPEECH_LIPS = ("together", "purse", "funnel", "suck", "lower_raise", "stretch", "pull", "chin_raise", "apart", "tighten",
+               "upper_raise", "corner_stretch")
+
+
+def is_speech_track(name):
+    if name == "jaw_mid_open" or name.startswith(SPEECH_PREFIXES):
+        return True
+    return name.startswith("lips_") and any(k in name for k in SPEECH_LIPS)
+
+
+def audio_tracks(folder, trace, n, profile="speech"):
+    """All of the voice model's tracks for the trace's own audio (caption words when there are any), on the trace's clock."""
+    import lipsync
+    from analyze import caption_words
+    audio = trace.get("audio")
+    if not audio:
+        return {}, 0
+    words, _ = caption_words(folder, trace["start"], n / FPS)
+    res = lipsync.simulate_lipsync(os.path.join(folder, audio["file"]), profile=profile, words=words or None)
+    shift = round((audio.get("start", trace["start"]) - trace["start"]) * FPS)   # audio may start after the trace
+    out = {}
+    for k, v in res["tracks"].items():
+        a = np.zeros(n)
+        v = np.array(v[:max(0, n - shift)])
+        a[shift:shift + len(v)] = v
+        out[k] = a
+    return out, len(words)
+
+
+def hybrid_tracks(video, voice):
+    """video, voice: {track: array}. Speech tracks come from the voice; the jaw also takes the video where the video
+    shows the mouth open further than the voice suggests; every other track comes from the video. No face in a frame:
+    the video-sourced tracks are empty there, the voice-sourced ones carry on."""
+    out = {}
+    for k, v in voice.items():
+        if is_speech_track(k):
+            out[k] = v.copy()
+    for k, v in video.items():
+        if is_speech_track(k):
+            if k == "jaw_mid_open":
+                out[k] = np.fmax(out.get(k, np.zeros_like(v)), np.nan_to_num(v))
+        else:
+            out[k] = v
+    return out
+
+
 def tongue_from_audio(folder, trace, n):
     """The audio model's tongue tracks for the trace's own audio (with caption words when there are any)."""
     import lipsync
@@ -106,7 +157,7 @@ def jl(a, nd=4):
     return [None if (isinstance(x, float) and math.isnan(x)) or (hasattr(x, "dtype") and np.isnan(x)) else round(float(x), nd) for x in a]
 
 
-def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True):
+def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True):
     folder = os.path.abspath(folder)
     perf = json.load(open(os.path.join(folder, "performance.json"), encoding="utf-8"))
     if perf.get("format") != "lipscan-performance/1":
@@ -129,14 +180,21 @@ def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True):
         return {**base, "target": "arkit52", "tracks": {k: jl(chan[k]) for k in BLENDSHAPES if k != "_neutral"},
                 "head": {k: jl(chan[c], 2) for k, c in (("yaw", "headYaw"), ("pitch", "headPitch"), ("roll", "headRoll"))}}
     tracks, unused = apply_mapping(chan, mapping)
-    if tongue:
+    mode = "video"
+    if hybrid and trace.get("audio"):
+        voice, nwords = audio_tracks(folder, trace, n)
+        tracks = hybrid_tracks(tracks, voice)
+        mode = "hybrid"
+        base["hybrid"] = {"mouth": "voice model" + (f" with {nwords} caption words" if nwords else " (no words: jaw, tongue and neck only)"),
+                          "face": "video"}
+    elif tongue:
         for k, v in tongue_from_audio(folder, trace, n).items():
             tracks[k] = np.where(face_seen, v, np.nan)
     out = {**base, "target": "cyberpunk-raw", "mapping": os.path.basename(mapping_path),
            "tracks": {k: jl(v) for k, v in sorted(tracks.items())},
            "head": {k: jl(v, 2) for k, v in head_curves(chan, mapping).items()},
            "head_split": mapping.get("head", {}).get("split"),
-           "unmapped_sources": sorted(set(unused) | set(mapping.get("unmapped_sources", {})))}
+           "unmapped_sources": sorted(set(unused) | set(mapping.get("unmapped_sources", {}))), "mouth_source": mode}
     if export == "cyberpunk":
         from export import cyberpunk
         out = cyberpunk(out)
@@ -148,10 +206,13 @@ def main():
     ap.add_argument("folder", help="trace folder with performance.json (from analyze/performance.py)")
     ap.add_argument("--mapping", default=DEFAULT_MAPPING)
     ap.add_argument("--export", choices=["raw", "cyberpunk", "arkit52"], default="raw")
-    ap.add_argument("--no-tongue", action="store_true", help="don't add tongue tracks from the audio model")
+    ap.add_argument("--no-tongue", action="store_true", help="(video-only mode) don't add tongue tracks from the audio model")
+    ap.add_argument("--video-only", action="store_true",
+                    help="read the mouth from the video too. Default is a hybrid: jaw, lips, tongue and neck from the voice, "
+                         "everything else (head, brows, eyes, blinks, gaze, smiles) from the video")
     ap.add_argument("--out")
     a = ap.parse_args()
-    res = retarget(a.folder, a.mapping, a.export, not a.no_tongue)
+    res = retarget(a.folder, a.mapping, a.export, not a.no_tongue, hybrid=not a.video_only)
     out = a.out or os.path.join(os.path.abspath(a.folder), f"retarget-{'cyberpunk' if a.export != 'arkit52' else 'arkit52'}.json")
     with open(out, "w", encoding="utf-8") as fh:
         json.dump(res, fh, separators=(",", ":"))

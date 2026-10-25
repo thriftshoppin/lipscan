@@ -232,6 +232,21 @@ with tempfile.TemporaryDirectory() as tmp:
           "tongue_mid_base_up" not in lipsync.load_profile("speech")["follow_jaw"])
     press = plain["lips_together_up"]
     check("smoothing: p/b/m presses stay crisp (still reach the cap)", max(press) > 0.9, f"{max(press):.2f}")
+    # ---- 0.2.4: hybrid retarget (mouth from the voice, face from the video) ----
+    nan = float("nan")
+    video = {"jaw_mid_open": np.array([0.05, 0.4, nan]), "lips_l_purse": np.array([0.3, 0.3, 0.3]),
+             "eye_l_blink": np.array([0.9, 0.0, nan]), "eye_l_brows_raise_in": np.array([0.2, 0.2, nan]),
+             "lips_l_corner_up": np.array([0.5, 0.5, nan]), "tongue_mid_lift": np.array([0.9, 0.9, 0.9])}
+    voice = {"jaw_mid_open": np.array([0.3, 0.1, 0.3]), "lips_l_purse": np.array([0.0, 0.5, 0.0]), "tongue_mid_lift": np.array([0.1, 0.1, 0.1]),
+             "eye_l_blink": np.array([0.0, 1.0, 0.0])}
+    hy = rt.hybrid_tracks(video, voice)
+    check("hybrid: jaw is the voice's, unless the video shows the mouth wider", list(hy["jaw_mid_open"]) == [0.3, 0.4, 0.3])
+    check("hybrid: lip shapes and tongue come from the voice, not the video", list(hy["lips_l_purse"]) == [0.0, 0.5, 0.0] and list(hy["tongue_mid_lift"]) == [0.1, 0.1, 0.1])
+    check("hybrid: blinks, brows and smiles come from the video (and stay empty where no face was seen)",
+          hy["eye_l_blink"][0] == 0.9 and np.isnan(hy["eye_l_blink"][2]) and hy["lips_l_corner_up"][1] == 0.5 and "eye_l_brows_raise_in" in hy)
+    check("hybrid: speech tracks are recognised (jaw, lip shapes, tongue, neck) and face tracks are not",
+          all(rt.is_speech_track(k) for k in ("jaw_mid_open", "lips_together_up", "lips_l_purse", "tongue_mid_lift", "neck_throat_open"))
+          and not any(rt.is_speech_track(k) for k in ("eye_l_blink", "eye_l_brows_lower", "lips_l_corner_up", "jaw_mid_shift_l", "nose_l_snear")))
     check("profiles: speech-kerry (one voice) and speech-cyberpunk (six characters) both load",
           lipsync.load_profile("speech-kerry")["name"] == "speech-kerry" and lipsync.load_profile("speech")["name"] == "speech-cyberpunk")
 
