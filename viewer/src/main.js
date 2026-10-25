@@ -816,20 +816,47 @@ function fillDemoLines() {
 let live = null, liveTimer = 0, liveSeq = 0;
 const dialValues = () => ({ articulation: +$("dialArt").value, expressiveness: +$("dialExp").value, coupling: +$("dialCp").value });
 function setDialLabels() { $("artOut").textContent = (+$("dialArt").value).toFixed(2); $("expOut").textContent = (+$("dialExp").value).toFixed(2); $("cpOut").textContent = (+$("dialCp").value).toFixed(2); }
+// What a head plays: "video" (everything from his face), "hybrid" (video + audio) or "audio" (the voice model alone).
+// video is a file; hybrid and audio are made by the dev server with the dials' settings.
+const SOURCE_LABEL = { video: "Video only", hybrid: "Video + audio (hybrid)", audio: "Audio only" };
+async function genSource(kind) {
+  const q = new URLSearchParams({ ...live.jobs[kind], ...dialValues(), rig: live.rig });
+  const r = await fetch(`/api/gen?${q}`);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function showSource(slot, kind) {
+  if (kind === "video") await loadAnim(slot, await get(live.line.sources.video));
+  else {
+    const json = await genSource(kind);
+    live.settings = json.settings || live.settings;
+    await loadAnim(slot, new File([JSON.stringify(json)], `lipscan-${kind}.json`));
+  }
+}
+async function changeSource(slot) {
+  if (!live || !live.line.sources) return;
+  const kind = $(`src${slot}`).value, t = state.t, was = state.playing;
+  live.slotKind[slot] = kind;
+  $("dialInfo").textContent = "updating…";
+  try {
+    await showSource(slot, kind);
+    seek(t);
+    if (was) setPlaying(true);
+    $("dialInfo").textContent = "";
+  } catch (e) { $("dialInfo").textContent = String(e.message || e).slice(0, 120); }
+}
+$("srcA").onchange = () => changeSource("A");
+$("srcB").onchange = () => changeSource("B");
 async function regenerate() {
   if (!live) return;
   const seq = ++liveSeq, d = dialValues(), t = state.t, was = state.playing;
   $("dialInfo").textContent = "updating…";
   try {
-    const jobs = [];
-    for (const [slot, job] of Object.entries(live.jobs)) {
-      const q = new URLSearchParams({ ...job, ...d, rig: live.rig });
-      jobs.push(fetch(`/api/gen?${q}`).then(async (r) => { if (!r.ok) throw new Error(await r.text()); return [slot, await r.json()]; }));
-    }
-    const done = await Promise.all(jobs);
+    const slots = Object.entries(live.slotKind).filter(([, kind]) => kind !== "video");        // a video-only head doesn't depend on the dials
+    const done = await Promise.all(slots.map(async ([slot, kind]) => [slot, kind, await genSource(kind)]));
     if (seq !== liveSeq) return;                                    // a newer change is already on its way
-    for (const [slot, json] of done) {
-      await loadAnim(slot, new File([JSON.stringify(json)], `lipscan-live-${slot}.json`));
+    for (const [slot, kind, json] of done) {
+      await loadAnim(slot, new File([JSON.stringify(json)], `lipscan-${kind}.json`));
       live.settings = json.settings || live.settings;
     }
     seek(t);
@@ -863,13 +890,26 @@ async function loadDemo() {
     } else if (state.video) { state.video = null; $("videoPane").hidden = true; $("nameVideo").textContent = "Video…"; }
     live = null;
     $("dials").hidden = true;
+    $("srcBox").hidden = true;
     if (location.protocol !== "file:" && (l.hybrid || l.audio)) {   // the dials need the dev server; probe it once per line
       const ok = await fetch("/api/gen").then((r) => r.status !== 404, () => false);
       if (ok) {
         const base = { profile: l.profile || demo.profile || "speech" };
-        const jobs = { B: { mode: "voice", wav: l.audio, ...(l.text && !l.noText ? { text: l.text } : {}), ...base } };
-        if (l.hybrid) jobs.A = { mode: "hybrid", folder: l.hybrid, ...base };
-        live = { jobs, rig: c.pack.replace(/\/?$/, "/") + "character.json", settings: null };
+        const jobs = { audio: { mode: "voice", wav: l.audio, ...(l.text && !l.noText ? { text: l.text } : {}), ...base } };
+        if (l.hybrid) jobs.hybrid = { mode: "hybrid", folder: l.hybrid, ...base };
+        live = { jobs, line: l, slotKind: l.sources ? { A: "hybrid", B: "audio" } : (l.hybrid ? { A: "hybrid", B: "audio" } : { B: "audio" }),
+                 rig: c.pack.replace(/\/?$/, "/") + "character.json", settings: null };
+        if (l.sources) {                                              // let each head play any of the sources
+          const kinds = Object.keys(SOURCE_LABEL).filter((k) => l.sources[k]);
+          for (const [slot, init] of [["A", "hybrid"], ["B", "audio"]]) {
+            const sel = $(`src${slot}`);
+            sel.innerHTML = "";
+            kinds.forEach((k) => sel.add(new Option(SOURCE_LABEL[k], k)));
+            sel.value = kinds.includes(init) ? init : kinds[0];
+            live.slotKind[slot] = sel.value;
+          }
+          $("srcBox").hidden = false;
+        }
         $("dials").hidden = false;
         $("dialInfo").textContent = "";
         for (const id of ["dialArt", "dialExp", "dialCp"]) $(id).value = 1;

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3 (2026-10-25)
+
+Each head can play any source.
+
+- **Viewer:** a "Head sources" panel in the Test set. Head A and Head B each switch between **Video only** (everything from the face), **Video + audio** (the hybrid) and **Audio only** (the voice model alone), while playback keeps its place. The dials re-run the heads that use the voice and leave a video-only head alone. A line offers it when its manifest entry has `sources: {video, hybrid, audio}` (clip URLs) and the dev server is running (the hybrid and audio heads are generated there).
+- **Music in the audio:** the voice model hears everything in the track, so with music behind the vocals the audio-only head follows the music as well; this is why video only is the guide for such a clip. Separating the vocals first is not done here.
+
 ## 0.3.2 (2026-10-25)
 
 Lip separation, found on a close-up singing video, and a video hide button.

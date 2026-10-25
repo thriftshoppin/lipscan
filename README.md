@@ -133,7 +133,7 @@ Those rules became a model. To check them against real people rather than one ga
   - `--coupling` and `--jaw-presence` (or `--rig`): see docs/MEASUREMENTS.md.
   - Lips push forward on oo, w, o and sh/ch (profile key `lip_forward`, scaled by articulation). `analyze.py "<folder>" --forward` compares that with the video.
   - A profile can set its own defaults (`"articulation"`, `"expressiveness"`, `"coupling"`); the command line wins. `retarget.py` takes the same flags for the hybrid. `analyze.py "<folder>" --sweep` tries values against a real face.
-  - In the viewer's Test set, three sliders re-run the model live next to the original (dev server only).
+  - In the viewer's Test set, three sliders re-run the model live next to the original, and Head A / Head B each switch between video only, video + audio (the hybrid) and audio only (dev server only).
 
 ## See it on a real head (Cyberpunk 2077)
 

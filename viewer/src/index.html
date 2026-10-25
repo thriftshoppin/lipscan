@@ -89,6 +89,11 @@
       <div class="row"><select id="demoLine" style="max-width:100%"></select></div>
       <div class="row"><button id="demoPrev">◀ Prev</button><button id="demoNext">Next ▶</button></div>
       <div id="demoText" style="font-size:12px;margin:4px 0"></div>
+      <div id="srcBox" hidden>
+        <h2>Head sources</h2>
+        <div class="row" title="Video only: everything from his face. Video + audio: the hybrid (head, brows and, where the video reads well, the mouth from the video; closures, tongue and neck from the voice). Audio only: the voice model, no video. With music in the audio, the audio-only head is a poor guide."><label>Head A <select id="srcA"></select></label></div>
+        <div class="row"><label>Head B <select id="srcB"></select></label></div>
+      </div>
       <div id="dials" hidden>
         <h2>Voice model dials</h2>
         <div class="row" title="How crisp the consonants are: d, t, k, g, p, b, f, v, oo. 1.0 is the model as measured."><label style="width:100%">Articulation <output id="artOut">1.00</output><input type="range" id="dialArt" min="0" max="2" step="0.05" value="1" style="width:100%"></label></div>
