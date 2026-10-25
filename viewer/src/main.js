@@ -933,6 +933,8 @@ async function fromUrl() {
   if (q.get("demo")) {
     await startDemo(q.get("demo"));
     if (q.get("cam") === "front") { $("frontCam").checked = true; $("frontCam").dispatchEvent(new Event("change")); }
+    if (q.get("t")) seek(+q.get("t"));                    // &t=80 starts there; &play=1 starts playing (the browser may need a click first for sound)
+    if (q.get("play") === "1") setPlaying(true);
     return;
   }
   if (!q.get("pack")) return;
