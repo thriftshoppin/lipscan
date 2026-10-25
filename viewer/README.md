@@ -42,6 +42,14 @@ python build_character.py --wolvenkit "<path>\WolvenKit.CLI.exe" --game "<Cyberp
 
 The pack is a folder with `character.json` plus the head, eyebrows, eyes and teeth `.glb` files. It only reads the game archives; it never changes the game.
 
+### The game's textures (optional)
+
+```
+python build_textures.py --wolvenkit "<path>\WolvenKit.CLI.exe" --game "<Cyberpunk 2077 folder>" --pack "<the pack folder>"
+```
+
+Adds the head's skin, the eyebrows' strand texture, the teeth and the plain eye texture, uncooked from your archives into the pack's `textures\` folder. The viewer then shows them (a **Textures** checkbox turns them off). Named characters work; the player's layered heads keep their flat colour. Like the rest of a pack this is game data: keep it on your PC.
+
 ## V and the character creator
 
 Point `--head` at a player base head, and the pack gets the character creator's face options:
@@ -100,6 +108,7 @@ How it works (the solver, the file formats, head motion): see `../claude/skills/
 | File | What it is |
 |---|---|
 | `build_character.py` | Converter: your game files → a private character pack. |
+| `build_textures.py` | Adds the game's skin, eye, eyebrow and teeth textures to a pack, from your install. |
 | `src/solver.js` | Track values → bone deformations, rebuilt from the facial setup, plus head motion. |
 | `src/anims.js` | Loads WolvenKit `.anims` glTF exports and LipScan curve files. |
 | `src/main.js`, `src/index.html` | The app: scene, A/B view, timeline, pose tester, video pane, address parameters. |

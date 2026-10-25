@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 (2026-10-25)
+
+The game's textures on the viewer's heads, and eyes that look like eyes.
+
+- **`viewer/build_textures.py`** adds textures to a pack you built with `build_character.py`, from your own install with the WolvenKit CLI: the head's skin (albedo, normal, roughness), the eyebrows' strand texture, the teeth's albedo and the game's plain eye albedo, uncooked to PNG into `<pack>\textures\` and listed in `character.json`. Named characters have a plain skin material, so they work (all six of the test set); the player's layered heads keep their flat colour. The textures are game data, so they stay in the pack, outside the repo (`textures/` is in `.gitignore`).
+- **Viewer:** uses them when the pack has them, with a **Textures** checkbox to compare with the flat colours. The skin and teeth take their albedo; the eyebrow's strand alpha is boosted so the strands read as brow hair; the eyeball is mapped to the eye picture from the front (the game's material rescales the mesh's UVs, which are not a plain map of the picture).
+- **Eyes:** the eyes mesh has a small submesh that is the game's eye-wetness shadow layer (a mask with a red-brown shadow colour), not a surface. Drawn opaque it was a white disc over the pupil, and with the texture an orange one. It is hidden when the eyes are textured. The result is a brown iris, a dark pupil and veined whites.
+- **Not done:** the normal and roughness maps are loaded but not shown (their channel layout is unchecked: `NORMAL_MAPS` in `main.js`); hair and beards are not in a pack; the player's layered heads (multilayer masks) are not covered; a character's own eye colour is not read (the plain eyeball is used for everyone).
+- **Tests:** 3 new checks (98 in test_performance.py).
+
 ## 0.3.6 (2026-10-25)
 
 Diction from the singer's own lips.

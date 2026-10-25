@@ -78,12 +78,100 @@ function colorByBone(mesh, pick) {
   mesh.material.color.setHex(0xffffff);
 }
 
+// ---------------- the game's textures (build_textures.py adds them to a pack; optional) ----------------
+// pack.textures: [{role, slot, file}]: role head or eyes, slot map (albedo), normalMap or roughnessMap. Only used when the pack has them.
+const TEX_SLOTS = ["map", "normalMap", "roughnessMap"];
+async function loadTextures(pack, byName) {
+  const out = {};
+  const loader = new THREE.TextureLoader();
+  for (const t of pack.textures || []) {
+    const f = byName.get(t.file.split("/").pop().toLowerCase());
+    if (!f || !TEX_SLOTS.includes(t.slot)) continue;
+    const url = URL.createObjectURL(f);
+    try {
+      const tex = await loader.loadAsync(url);
+      tex.flipY = false;                                   // glTF's UV origin is the top left, as in the exported meshes
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;        // the eyes' UVs run past 0..1
+      tex.anisotropy = 8;
+      if (t.slot === "map") tex.colorSpace = THREE.SRGBColorSpace;
+      (out[t.role] = out[t.role] || {})[t.slot] = tex;
+    } catch (e) { console.warn("texture", t.file, e); }
+    URL.revokeObjectURL(url);
+  }
+  return out;
+}
+// Which meshes of a role take the texture: the head; the eyeball and its lash line, not the thin see-through overlay.
+function takesTexture(role, mesh) {
+  return role === "head" || role === "eyebrows" || role === "teeth" || (role === "eyes" && !/doubled/i.test(mesh.name) && mesh.geometry.attributes.position.count >= 300);   // the eyeball, not the lash line
+}
+// The game's eye texture is a flat picture of one eye (pupil, iris, veined white) on a skin-coloured surround, and its material
+// rescales the mesh's UVs. Each eyeball is mapped to it from the front instead: the picture's centre on the eye's centre, 0.27 of
+// the picture across half the eyeball (so the iris is about half the eyeball's radius, as in a real eye).
+const EYE_UV = { cx: 0.54, cy: 0.51, scale: 0.27 };
+function mapEyeUV(mesh) {
+  const g = mesh.geometry;
+  if (g.userData.eyeUV || !g.attributes.position || g.attributes.position.count < 300) return;     // the lash line and the overlay keep theirs
+  g.userData.eyeUV = true;
+  const pos = g.attributes.position, n = pos.count, v = new THREE.Vector3();
+  const xs = Array.from({ length: n }, (_, i) => pos.getX(i)).sort((a, b) => a - b);
+  const mid = xs[n >> 1];
+  const box = [new THREE.Box3(), new THREE.Box3()];
+  for (let i = 0; i < n; i++) box[pos.getX(i) < mid ? 0 : 1].expandByPoint(v.fromBufferAttribute(pos, i));
+  const uv = new Float32Array(n * 2), c = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    const b = box[pos.getX(i) < mid ? 0 : 1];
+    b.getCenter(c);
+    const R = Math.max(1e-4, (b.max.z - b.min.z) / 2);
+    uv[i * 2] = EYE_UV.cx - ((pos.getX(i) - c.x) / R) * EYE_UV.scale;          // the viewer's right is -x
+    uv[i * 2 + 1] = EYE_UV.cy - ((pos.getY(i) - c.y) / R) * EYE_UV.scale;
+  }
+  g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+}
+function applyTextures(mesh, role) {
+  const tex = state.textures && state.textures[role];
+  if (tex && role === "eyes" && !/doubled/i.test(mesh.name) && mesh.geometry.attributes.position.count < 300) {
+    // the small submesh over the pupil is the game's eye-wetness SHADOW layer (a red-brown shadow colour in a mask), not a surface:
+    // drawn opaque it was a white disc, with the texture an orange one. The eyeball's own texture has the pupil.
+    mesh.material.visible = !$("showTex").checked;
+    return;
+  }
+  if (!tex || !takesTexture(role, mesh)) return;
+  if (role === "eyes") mapEyeUV(mesh);
+  const on = $("showTex").checked;
+  const m = mesh.material;
+  m.userData.tex = tex;
+  m.map = on && tex.map ? tex.map : null;
+  m.normalMap = on && tex.normalMap && NORMAL_MAPS ? tex.normalMap : null;
+  const textured = on && !!tex.map;
+  if (role === "teeth") {                              // the teeth mesh also holds gums and tongue: the texture colours them, so the per-bone colours step aside
+    m.vertexColors = !textured;
+    m.color.setHex(0xffffff);
+  } else if (role === "eyebrows") {
+    m.color.setHex(textured ? 0x4a3d33 : 0x3a2f28);                                    // the strand texture is grey: tinted brown
+    if (!m.userData.strands) {                                                         // the strands are thin: make their alpha count for more
+      m.userData.strands = true;
+      const lift = m.onBeforeCompile;
+      m.onBeforeCompile = (sh) => {
+        if (lift) lift(sh);
+        sh.fragmentShader = sh.fragmentShader.replace("#include <map_fragment>",
+          "#include <map_fragment>\n#ifdef USE_MAP\n diffuseColor.a = clamp(sampledDiffuseColor.a * 3.5, 0.0, 1.0) * opacity;\n#endif");
+      };
+      m.customProgramCacheKey = () => "brows-strands";
+    }
+    m.opacity = textured ? 1.0 : 0.85;
+  }
+  else m.color.setHex(textured ? 0xffffff : (role === "eyes" ? 0xe9e6e0 : 0xc9b8aa));
+  m.needsUpdate = true;
+}
+const NORMAL_MAPS = false;                                 // the game's normal maps need their channels checked before they are shown
+
 // ---------------- state ----------------
 const state = {
   pack: null, solver: null, meshFiles: [], heads: { A: null, B: null },
   anim: { A: null, B: null }, clip: { A: null, B: null },
   t: 0, playing: false, speed: 1, loop: true, audio: null, offset: 0, curves: { A: null, B: null },
   video: null, // {start, frames: [{t, src}]} from a LipScan trace folder
+  textures: null,
 };
 const values = { A: null, B: null };
 
@@ -103,6 +191,7 @@ async function buildHead(slot) {
         o.userData.role = m.role;
         if (role === "teeth" && o.isSkinnedMesh) colorByBone(o, (name) => (/tongue/i.test(name) ? 0xb4625e : 0xece4d0));
         if (role === "eyes" && /doubled/i.test(o.name)) { o.material.transparent = true; o.material.opacity = 0.12; o.material.depthWrite = false; }
+        applyTextures(o, role);
       }
     });
     holder.add(gltf.scene);
@@ -147,6 +236,8 @@ async function loadCharacter(files) {
   const pack = JSON.parse(await cj.text());
   if (pack.format !== "lipscan-character/1") throw new Error("character.json isn't a LipScan character pack.");
   state.pack = pack;
+  state.textures = await loadTextures(pack, byName);
+  $("texRow").hidden = !Object.keys(state.textures).length;
   state.solver = new FaceSolver(pack);
   state.meshFiles = pack.meshes.filter((m) => byName.has(m.file.toLowerCase())).map((m) => ({ ...m, blob: byName.get(m.file.toLowerCase()) }));
   for (const s of ["A", "B"]) {
@@ -612,6 +703,9 @@ $("fMood").addEventListener("change", async (e) => {
   } catch (err) { report(err); fillMoods(); }
 });
 for (const s of ["A", "B"]) $(`mood${s}`).addEventListener("change", () => { computeCurve(s); render(); });
+$("showTex").addEventListener("change", () => {
+  for (const slot of ["A", "B"]) if (state.heads[slot]) state.heads[slot].traverse((o) => { if (o.isMesh) applyTextures(o, o.userData.role); });
+});
 $("showVideo").addEventListener("change", () => { $("videoPane").hidden = !state.video || !$("showVideo").checked; shownFrame = -1; showFrame(); });
 // Hide the source video (the button on it, the V key, or &hidevideo=1); the choice is remembered in this browser.
 function setVideoShown(on) {
@@ -706,7 +800,7 @@ async function filesFromDrop(dt) {
   return out;
 }
 async function handleFiles(files) {
-  const charFiles = files.filter((f) => /^character\.json$/i.test(f.name) || /^(head|eyebrows|eyes|teeth|.+)\.glb$/i.test(f.name) && files.some((x) => /^character\.json$/i.test(x.name)));
+  const charFiles = files.filter((f) => /^character\.json$/i.test(f.name) || /^(head|eyebrows|eyes|teeth|.+)\.(glb|png)$/i.test(f.name) && files.some((x) => /^character\.json$/i.test(x.name)));
   if (charFiles.some((f) => /^character\.json$/i.test(f.name))) await loadCharacter(charFiles);
   let rest = files.filter((f) => !charFiles.includes(f));
   if (rest.some((f) => /^trace\.json$/i.test(f.name))) {
@@ -769,7 +863,7 @@ async function loadPackUrl(url) {
   if (loadedPack === base) return;
   const cj = await get(base + "character.json");
   const pack = JSON.parse(await cj.text());
-  await loadCharacter([cj, ...(await Promise.all(pack.meshes.map((m) => get(base + m.file))))]);
+  await loadCharacter([cj, ...(await Promise.all([...pack.meshes.map((m) => m.file), ...(pack.textures || []).map((t) => t.file)].map((f) => get(base + f))))]);
   loadedPack = base;
 }
 

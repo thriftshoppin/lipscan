@@ -453,5 +453,23 @@ add_ = rt.apply_video_closures({k: v.copy() for k, v in voice.items()}, vg, repl
 check("video closures: video-only adds them to whatever the mapping gave", add_["lips_together_up"][40] == 1 and add_["lips_together_up"][10:13].sum() == 3)
 check("video closures: no gap, no change", rt.apply_video_closures({"lips_together_up": np.zeros(5)}, None, True)["lips_together_up"].sum() == 0)
 
+# ---- 0.4.0: the game's textures for a viewer pack (viewer/build_textures.py picks them from a mesh's materials) ----
+sys.path.insert(0, os.path.join(ROOT, "viewer"))
+import warnings  # noqa: E402
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import build_textures as bt  # noqa: E402
+skin_mat = {"Name": "skin_face", "MaterialTemplate": "base\\materials\\skin.mt",
+            "Data": {"Albedo": "a\\h_d01.xbm", "Normal": "a\\h_n01.xbm", "Roughness": "a\\h_rm01.xbm", "TintColorMask": "a\\mask.xbm"}}
+decal = {"Name": "decal_shower", "MaterialTemplate": "base\\materials\\mesh_decal_wet_character.mt", "Data": {"DiffuseTexture": "a\\water_drops_d01.xbm"}}
+layered = {"Name": "skin_ml", "MaterialTemplate": "engine\\materials\\multilayered.mt", "Data": {"MultilayerSetup": "a\\x.mlsetup"}}
+check("textures: the head's skin albedo, normal and roughness are taken from the skin material, not the decal",
+      bt.pick_skin({"Materials": [decal, skin_mat]}) == {"Albedo": "a\\h_d01.xbm", "Normal": "a\\h_n01.xbm", "Roughness": "a\\h_rm01.xbm"})
+check("textures: a layered skin (the player's heads) gives nothing, so its flat colour is kept", bt.pick_skin({"Materials": [layered]}) == {})
+brow = lambda name, tex: {"Name": name, "MaterialTemplate": "x\\decal_double_diffuse.mt", "Data": {"DiffuseTexture": f"base\\characters\\common\\character_customisation_items\\eyebrows\\textures\\{tex}.xbm"}}
+check("textures: the brows take the material named default, and nothing that is not an eyebrow texture",
+      bt.pick_brows({"Materials": [decal, brow("black_10", "heb__base_d10"), brow("default", "heb__base_d01")]})["Albedo"].endswith("heb__base_d01.xbm")
+      and bt.pick_brows({"Materials": [decal]}) == {})
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)
