@@ -124,6 +124,8 @@ Lip separation: when the video's jaw reaches the rig's scale (95th percentile 0.
 
 Rounded mouths: MediaPipe's `mouthPucker` goes to the rig's purse while the lip gap says the lips are shut (under 0.04) and to the funnel as they part (to 0.10), so a sung "o" is an open round mouth instead of a pout. `--round-split 0` maps the pucker to the purse as before.
 
+Lip gap: where the head's lips are less parted than the video's measured lip gap, they open to match (`--gap-fill 0` to turn off). It never closes lips, and it leaves closures and frames with no face alone.
+
 ## In the viewer
 
 The face viewer (built with `claude/skills/cyberpunk-face-viewer`) plays `retarget-cyberpunk.json` in slot A or B:

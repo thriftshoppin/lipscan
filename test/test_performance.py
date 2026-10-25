@@ -403,5 +403,31 @@ res = rt.split_round_mouth({"lips_l_purse": nanp}, g2)
 check("round mouth: frames with no face stay empty", np.isnan(res["lips_l_purse"][10:15]).all() and not np.isnan(res["lips_l_purse"][40]))
 check("round mouth: strength 0 leaves the mapped tracks alone", np.allclose(rt.split_round_mouth({"lips_l_purse": pk.copy()}, gp, 0.0)["lips_l_purse"], pk))
 
+# ---- 0.3.5: the head's lips are parted wherever the video's are ----
+n = 150
+gap = np.zeros(n)
+gap[40:80] = 0.09                                  # lips apart on the video, jaw at 0 (the upper lip lifts, the teeth show)
+gap[100:120] = 0.005                               # shut
+tr = {"jaw_mid_open": np.zeros(n), "lips_apart_dn": np.zeros(n), "lips_apart_up": np.zeros(n), "lips_l_upper_raise": np.full(n, 0.24)}
+out = rt.fill_lip_gap({k: v.copy() for k, v in tr.items()}, gap)
+shown = lambda T, f: 0.02 + 0.183 * T["jaw_mid_open"][f] + 0.156 * T["lips_apart_dn"][f] + 0.037 * T["lips_l_upper_raise"][f]
+check("lip gap: lips parted on the video but shut on the head are opened (half the shortfall to each lip, 0.156 per unit of lower-lip drop)",
+      shown(tr, 60) < 0.035 and abs(out["lips_apart_dn"][60] - 0.5 * (0.09 - shown(tr, 60)) / 0.156) < 0.03 and abs(out["lips_apart_up"][60] - out["lips_apart_dn"][60]) < 1e-6,
+      f"lower {out['lips_apart_dn'][60]:.2f}, upper {out['lips_apart_up'][60]:.2f}")
+check("lip gap: lips shut on the video stay shut", out["lips_apart_dn"][110] < 0.01 and out["lips_apart_up"][110] < 0.01)
+big = {"jaw_mid_open": np.full(n, 0.8), "lips_apart_dn": np.full(n, 0.6), "lips_apart_up": np.full(n, 0.6)}
+after = rt.fill_lip_gap({k: v.copy() for k, v in big.items()}, np.full(n, 0.02))
+check("lip gap: it only opens the lips, never closes them", all(np.allclose(after[k], big[k]) for k in big))
+clos = {k: v.copy() for k, v in tr.items()}
+clos["lips_together_up"] = np.zeros(n)
+clos["lips_together_up"][60:70] = 1.0
+res = rt.fill_lip_gap(clos, gap)
+check("lip gap: a p/b/m closure stays closed", np.allclose(res["lips_apart_dn"][60:70], 0) and res["lips_apart_dn"][50] > 0.05)
+nf = gap.copy()
+nf[40:50] = np.nan
+res = rt.fill_lip_gap({k: v.copy() for k, v in tr.items()}, nf)
+check("lip gap: frames with no face are left as they are", np.allclose(res["lips_apart_dn"][41:49], 0))
+check("lip gap: strength 0 leaves the tracks alone", np.allclose(rt.fill_lip_gap({k: v.copy() for k, v in tr.items()}, gap, 0.0)["lips_apart_dn"], 0))
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

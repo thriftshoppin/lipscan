@@ -192,6 +192,39 @@ def split_round_mouth(tracks, gap, strength=1.0):
     return tracks
 
 
+# The lip gap a set of tracks shows, fitted on one close-up video (r = 0.96): the jaw, the lower lip's drop, the upper lip's lift and
+# the lower lip's roll. gap = 0.02 + 0.183 jaw + 0.156 lower-lip drop + 0.037 upper-lip lift - 0.179 lower-lip roll.
+GAP_FIT = {"const": 0.02, "jaw_mid_open": 0.183, "lips_apart_dn": 0.156, "lips_l_upper_raise": 0.037, "lips_suck_dn": -0.179}
+GAP_FILL_MAX = 0.15          # the most a shortfall may add (in gap units)
+
+
+def fill_lip_gap(tracks, gap, strength=1.0):
+    """Lips that are parted on the video must be parted on the head. The blendshapes miss some separations (the upper lip lifts and
+    the teeth show with the jaw at 0), so the head's visible gap ran below the measured one: median 0.05 against 0.09, and in 4% of
+    one song's frames the head's lips were shut while the real ones were apart. Where the gap the tracks show is less than the
+    measured lip gap, the lower and upper lips open to make up the difference (half each, by the fit above). It only ever opens
+    the lips: closures (p/b/m) and frames without a face are left as they are. strength 0 leaves the tracks alone."""
+    if strength <= 0 or gap is None or "jaw_mid_open" not in tracks:
+        return tracks
+    n = len(gap)
+    g = lambda k: np.nan_to_num(tracks[k][:n]) if k in tracks else np.zeros(n)
+    shown = GAP_FIT["const"] + sum(w * g(k) for k, w in GAP_FIT.items() if k != "const")
+    short = np.clip(np.nan_to_num(gap) - shown, 0.0, GAP_FILL_MAX)
+    short = np.where(np.isnan(gap), 0.0, short)
+    k = np.ones(3) / 3
+    short = np.convolve(np.pad(short, 1, mode="edge"), k, mode="valid")           # no flicker
+    short = np.where(short < 0.01, 0.0, short) * strength
+    shut = np.maximum(g("lips_together_up"), g("lips_together_dn")) > 0.4         # a real closure stays closed
+    short = np.where(shut, 0.0, short)
+    add = short / GAP_FIT["lips_apart_dn"] * 0.5
+    for name in ("lips_apart_dn", "lips_apart_up"):
+        cur = tracks.get(name, np.zeros(len(tracks["jaw_mid_open"])))
+        out = np.array(cur, dtype=float)
+        out[:n] = np.where(np.isnan(out[:n]), np.nan, np.minimum(1.0, np.nan_to_num(out[:n]) + add))
+        tracks[name] = out
+    return tracks
+
+
 VIDEO_PURSE_MIN = 0.03       # below this (95th percentile) the video shows no pucker at all in this clip: the voice's stays
 VIDEO_PURSE_TARGET = 0.15    # a small face reads pucker weakly (0.06 where the true value was 0.32, correlation still 0.69): lift it to this
 VIDEO_PURSE_GAIN_MAX = 4.0
@@ -305,7 +338,7 @@ def jl(a, nd=4):
 
 
 def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True, size=True, mouth_from="auto",
-             articulation=None, expressiveness=None, coupling=1.0, jaw_presence=1.0, profile="speech", round_split=1.0):
+             articulation=None, expressiveness=None, coupling=1.0, jaw_presence=1.0, profile="speech", round_split=1.0, gap_fill=1.0):
     folder = os.path.abspath(folder)
     perf = json.load(open(os.path.join(folder, "performance.json"), encoding="utf-8"))
     if perf.get("format") != "lipscan-performance/1":
@@ -344,6 +377,7 @@ def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hy
     elif tongue:
         for k, v in tongue_from_audio(folder, trace, n).items():
             tracks[k] = np.where(face_seen, v, np.nan)
+    tracks = fill_lip_gap(tracks, chan.get("lipGap"), gap_fill)
     tracks = add_coupling(tracks, n, coupling, jaw_presence)
     base["settings"] = {"articulation": articulation, "expressiveness": expressiveness, "coupling": coupling, "jaw_presence": jaw_presence}
     out = {**base, "target": "cyberpunk-raw", "mapping": os.path.basename(mapping_path),
@@ -373,6 +407,8 @@ def main():
                     help="(hybrid) who leads the jaw and lip separation: video when it reads the mouth at the rig's scale (auto), always, or never")
     ap.add_argument("--round-split", type=float, default=1.0, help="how much of the video's rounded-mouth reading (pucker) goes to the open funnel "
                     "instead of the closed purse as the lips part (0 = all to the purse, as mapped; default 1)")
+    ap.add_argument("--gap-fill", type=float, default=1.0, help="open the head's lips where they are less parted than the video's measured lip gap "
+                    "(0 = off, default 1)")
     ap.add_argument("--no-size", action="store_true", help="(hybrid) don't scale the voice's jaw and lips by the mouth size seen in the video")
     ap.add_argument("--video-only", action="store_true",
                     help="read the mouth from the video too. Default is a hybrid: jaw, lips, tongue and neck from the voice, "
@@ -382,7 +418,7 @@ def main():
     res = retarget(a.folder, a.mapping, a.export, not a.no_tongue, hybrid=not a.video_only, size=not a.no_size, mouth_from=a.mouth_from,
                    articulation=a.articulation, expressiveness=a.expressiveness, coupling=min(2.0, max(0.0, a.coupling)),
                    jaw_presence=min(1.3, max(0.7, a.jaw_presence if a.jaw_presence is not None else rig_presence(a.rig))), profile=a.profile,
-                   round_split=min(1.0, max(0.0, a.round_split)))
+                   round_split=min(1.0, max(0.0, a.round_split)), gap_fill=min(1.0, max(0.0, a.gap_fill)))
     if a.out == "-":
         json.dump(res, sys.stdout)
         return

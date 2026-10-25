@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.5 (2026-10-25)
+
+The head's lips are parted wherever the video's are.
+
+- **Found on a close-up singing video, by checking the sealed stretches while the audio was active:** the long stretches where the hybrid's lips stayed shut (5 of 0.4 s or more, 4 s in all) are stretches where the singer's own lips are shut (landmark gap 0.004), including a 2.1 s one at 19.6 s; the head follows the video there, and the voice-only head, which hears the music too, opens. The real error was the opposite one: the head's lips ran less parted than the video's, with a visible gap median of 0.05 against 0.086, and in 4.2% of frames (232) the lips were parted on the video and shut on the head. Cause: the blendshapes miss some separations (the upper lip lifts and the teeth show with `jawOpen` at 0), and nothing used the measured lip gap.
+- **Fix:** where the gap the head's tracks show (the fit in docs/MEASUREMENTS.md) is less than the measured lip gap, the lower and upper lip open to make up the difference, half each. It only opens: p/b/m closures, frames with no face and lips that are shut on the video are left as they are. `--gap-fill 0` turns it off. Parted-on-video but shut-on-head: 232 frames to 0 (hybrid), 144 to 0 (video-only); gap median 0.051 to 0.080 against 0.086, 95th percentile 0.148 to 0.185 against 0.184, match 0.95 to 0.97. The 985 frames where the real lips are shut stay shut (the head's gap there is unchanged, 0.019 median).
+- **Not done, on purpose:** forcing the lips open whenever the audio is loud. In this recording the audio is voice and music, so loud does not mean he is speaking, and in his own video his lips are shut for 3 s of voiced audio. Say if you want it as an option.
+- **Tests:** 6 new checks (89 in test_performance.py).
+- **Limits:** one face, one song. The split between the lips is the rig's guess (a render at the one frame that was wrong shows the teeth between the lips, as in the video), and the audio-only head is unchanged.
+
 ## 0.3.4 (2026-10-25)
 
 A rounded mouth read from video is a purse only while the lips are shut.
