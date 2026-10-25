@@ -28,7 +28,9 @@
     "lip_mode": "learned: soft lip shapes learned from the game that blend from sound to sound (p/b/m and f/v stay crisp); shapes: one fixed shape per sound (0.2.x)",
     "lip_contrast": "how much the learned lip shapes are exaggerated over the game's averages",
     "face_smooth_ms": "a final, slight zero-phase smoothing over the whole face (blinks and p/b/m presses stay crisp); 0 = off",
-    "head_smooth_ms": "the same for head motion"
+    "head_smooth_ms": "the same for head motion",
+    "audio_lips_gain": "without words, lips come from the sound (model/audio_lips.json); the regression shrinks peaks to about half the game's, so they're scaled up by this",
+    "audio_tongue_gain": "the same for the tongue"
   },
   "jaw_mean": {
     "-60": 0.027,
@@ -165,5 +167,7 @@
   "lip_mode": "learned",
   "lip_contrast": 2.5,
   "face_smooth_ms": 50,
-  "head_smooth_ms": 120
+  "head_smooth_ms": 120,
+  "audio_lips_gain": 1.7,
+  "audio_tongue_gain": 1.4
 }

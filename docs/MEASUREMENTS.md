@@ -229,6 +229,34 @@ Correlation with the game, each character scored with tables learned from the ot
 
 The final 50 ms smoothing is included in the 0.2.3 column. Without it, the lips score about 0.02 lower.
 
+## Lips from the sound alone (0.2.5)
+
+Without words, LipScan now predicts lip and tongue shapes straight from the voice's spectrum (a ridge regression over the log-mel energies, ±167 ms, line average removed), learned from the game's lipsync. Scored on characters it never saw (leave-one-character-out):
+
+| Track | From sound alone | From words (0.2.3) |
+|---|---|---|
+| jaw | 0.80 | 0.75 |
+| lip pull | 0.62 | 0.57 |
+| corners up | 0.64 | 0.58 |
+| corner stretch | 0.53 | 0.50 |
+| stretch | 0.51 | 0.50 |
+| corners down | 0.51 | |
+| lower lip raise | 0.46 | 0.46 |
+| purse | 0.42 | 0.40 |
+| tongue body | 0.56 | 0.57 |
+| tongue tip down | 0.54 | 0.57 |
+| tongue forward | 0.56 | 0.35 |
+| tongue back | 0.38 | 0.35 |
+| funnel | 0.23 | 0.47 |
+| lower lip tuck (f/v) | 0.22 | 0.39 |
+| **p/b/m closure** | **0.27** | **0.38** |
+
+Where the words win (closures, funnel, f/v), the sound can't tell the shapes apart. A closure peak-picked from sound alone hits 56% of the game's but invents 64% false ones, so crisp presses stay words-only.
+
+The regression shrinks peaks to about half the game's, so lips are scaled up ×1.7 and the tongue ×1.4 (mean absolute error 0.027 → 0.032; correlation is unchanged).
+
+**Mouth size from video.** A hybrid retarget scales the voice's jaw and lip movement by how far the video shows the mouth opening, over a 0.6 s window and relative to that clip's own 95th percentile. On a mumbling talking-head clip this raised the jaw's match with his real mouth from 0.46 to 0.79, and the mumbled moments now keep the lips nearly shut while his wide-open moments open.
+
 ## How well the voice-driven upper face matches
 
 Same clips; the model hears only the audio. "Hit" = a model blink starting within 0.3 s of the game's. "By chance" is what blinks at the same rate, placed at random, would score.

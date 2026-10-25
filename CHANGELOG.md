@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.5 (2026-10-25)
+
+Better lips for the hybrid, found by watching it next to the real video.
+
+- **Lips and tongue from the sound alone** (`model/audio_lips.py`, no words needed, numpy): learned from the game's lipsync, tested on characters it never saw. Jaw 0.80, pull 0.62, corners 0.64, stretch 0.51, tongue body 0.56, as good as the word-based ones. Closures, funnel and the f/v tuck still need words (docs/MEASUREMENTS.md). Profile settings `audio_lips`, `audio_lips_gain` (1.7), `audio_tongue_gain` (1.4).
+- **Mouth size from the video:** a mumbled delivery barely opens the mouth, and the voice-driven jaw made it gape. The hybrid retarget now lets the voice set when the mouth moves and the video set how much, over a 0.6 s window, relative to the clip's own range. The jaw's match with the real mouth rose from 0.46 to 0.79; `--no-size` turns it off.
+- **Viewer:** a live video test can sit in the Test set next to the game characters.
+- **Tests:** 4 new checks, 56 in test_performance.py.
+
 ## 0.2.4 (2026-10-25)
 
 First live test on a real video (a talking-head YouTube clip), and a hybrid retarget.

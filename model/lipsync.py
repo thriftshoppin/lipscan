@@ -840,9 +840,22 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
             press = [max(tracks.get(k, [0.0] * n)[f] for k in CLOSURE) for f in range(n)]
             for k, v in soft.items():
                 tracks[k] = [x * (1 - min(1.0, p)) for x, p in zip(v, press)]
-    else:                                                # no words: the tongue's resting speech posture only
+    else:                                                # no words
         loud = [d > cfg["normalize_to_db"] - 30 for d in db]
-        tracks.update(tongue_tracks([], n, loud, cfg))
+        learned = None
+        if cfg.get("audio_lips", True):                  # lips and tongue from the sound alone (audio_lips.py, needs numpy)
+            try:
+                sys.path.insert(0, HERE)
+                import audio_lips
+                learned = audio_lips.predict_tracks(samples, rate, n)
+            except (ImportError, OSError):
+                learned = None
+        if learned:
+            # regression shrinks peaks toward the average (about half the game's size); these gains restore presence
+            lg, tg = cfg.get("audio_lips_gain", 1.7), cfg.get("audio_tongue_gain", 1.4)
+            tracks.update({k: [min(1.0, x * (tg if k.startswith("tongue_") else lg)) for x in v] for k, v in learned.items()})
+        else:                                            # the tongue's resting speech posture only
+            tracks.update(tongue_tracks([], n, loud, cfg))
     tracks["jaw_mid_open"] = jaw
     for name, gain in cfg["follow_jaw"].items():
         base = tracks.get(name, [0.0] * n)

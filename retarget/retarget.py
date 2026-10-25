@@ -116,14 +116,34 @@ def audio_tracks(folder, trace, n, profile="speech"):
     return out, len(words)
 
 
-def hybrid_tracks(video, voice):
+def mouth_size(jaw, window_s=0.6, floor=0.3):
+    """How big his mouth movement really is, moment to moment, from the video's jaw: a slow envelope (the largest opening
+    within +-window_s/2), relative to the clip's own 95th percentile, so a mumbler and a shouter both map onto the
+    game's range. 1 = as wide as this clip gets; `floor` keeps a little syllable motion where the mouth barely opens.
+    1 where the video has no face."""
+    n = len(jaw)
+    ok = ~np.isnan(jaw)
+    if ok.sum() < 10:
+        return np.ones(n)
+    j = np.where(ok, jaw, 0.0)
+    half = max(1, int(window_s * FPS / 2))
+    env = np.array([j[max(0, i - half):i + half + 1].max() for i in range(n)])
+    k = np.exp(-0.5 * (np.arange(-half, half + 1) / (half / 2)) ** 2)
+    env = np.convolve(np.pad(env, half, mode="edge"), k / k.sum(), mode="valid")[:n]
+    ref = max(1e-3, float(np.percentile(env[ok], 95)))
+    return np.where(ok, np.clip(env / ref, floor, 1.0), 1.0)
+
+
+def hybrid_tracks(video, voice, size=None):
     """video, voice: {track: array}. Speech tracks come from the voice; the jaw also takes the video where the video
     shows the mouth open further than the voice suggests; every other track comes from the video. No face in a frame:
     the video-sourced tracks are empty there, the voice-sourced ones carry on."""
     out = {}
     for k, v in voice.items():
         if is_speech_track(k):
-            out[k] = v.copy()
+            # the voice sets WHEN the mouth moves; the video sets HOW MUCH (closures and the tongue keep their size)
+            sized = size is not None and (k == "jaw_mid_open" or (k.startswith("lips_") and "together" not in k))
+            out[k] = v * size if sized else v.copy()
     for k, v in video.items():
         if is_speech_track(k):
             if k == "jaw_mid_open":
@@ -157,7 +177,7 @@ def jl(a, nd=4):
     return [None if (isinstance(x, float) and math.isnan(x)) or (hasattr(x, "dtype") and np.isnan(x)) else round(float(x), nd) for x in a]
 
 
-def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True):
+def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True, size=True):
     folder = os.path.abspath(folder)
     perf = json.load(open(os.path.join(folder, "performance.json"), encoding="utf-8"))
     if perf.get("format") != "lipscan-performance/1":
@@ -183,7 +203,7 @@ def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hy
     mode = "video"
     if hybrid and trace.get("audio"):
         voice, nwords = audio_tracks(folder, trace, n)
-        tracks = hybrid_tracks(tracks, voice)
+        tracks = hybrid_tracks(tracks, voice, mouth_size(chan["jawOpen"]) if size else None)
         mode = "hybrid"
         base["hybrid"] = {"mouth": "voice model" + (f" with {nwords} caption words" if nwords else " (no words: jaw, tongue and neck only)"),
                           "face": "video"}
@@ -207,12 +227,13 @@ def main():
     ap.add_argument("--mapping", default=DEFAULT_MAPPING)
     ap.add_argument("--export", choices=["raw", "cyberpunk", "arkit52"], default="raw")
     ap.add_argument("--no-tongue", action="store_true", help="(video-only mode) don't add tongue tracks from the audio model")
+    ap.add_argument("--no-size", action="store_true", help="(hybrid) don't scale the voice's jaw and lips by the mouth size seen in the video")
     ap.add_argument("--video-only", action="store_true",
                     help="read the mouth from the video too. Default is a hybrid: jaw, lips, tongue and neck from the voice, "
                          "everything else (head, brows, eyes, blinks, gaze, smiles) from the video")
     ap.add_argument("--out")
     a = ap.parse_args()
-    res = retarget(a.folder, a.mapping, a.export, not a.no_tongue, hybrid=not a.video_only)
+    res = retarget(a.folder, a.mapping, a.export, not a.no_tongue, hybrid=not a.video_only, size=not a.no_size)
     out = a.out or os.path.join(os.path.abspath(a.folder), f"retarget-{'cyberpunk' if a.export != 'arkit52' else 'arkit52'}.json")
     with open(out, "w", encoding="utf-8") as fh:
         json.dump(res, fh, separators=(",", ":"))

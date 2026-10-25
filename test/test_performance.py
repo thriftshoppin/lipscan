@@ -247,6 +247,26 @@ with tempfile.TemporaryDirectory() as tmp:
     check("hybrid: speech tracks are recognised (jaw, lip shapes, tongue, neck) and face tracks are not",
           all(rt.is_speech_track(k) for k in ("jaw_mid_open", "lips_together_up", "lips_l_purse", "tongue_mid_lift", "neck_throat_open"))
           and not any(rt.is_speech_track(k) for k in ("eye_l_blink", "eye_l_brows_lower", "lips_l_corner_up", "jaw_mid_shift_l", "nose_l_snear")))
+    # ---- 0.2.5: mouth size from the video, lips from the sound alone ----
+    mumble = np.concatenate([np.full(60, 0.03), np.full(60, 0.3), np.full(15, np.nan)])
+    sz = rt.mouth_size(mumble)
+    check("mouth size: small where he mumbles, full where he opens wide, 1 where no face", sz[30] < 0.4 and sz[90] > 0.95 and sz[-1] == 1.0,
+          f"{sz[30]:.2f} / {sz[90]:.2f}")
+    hv = rt.hybrid_tracks({"jaw_mid_open": np.zeros(3)}, {"jaw_mid_open": np.full(3, 0.3), "tongue_mid_lift": np.full(3, 0.4),
+                                                       "lips_together_up": np.full(3, 1.0), "lips_l_pull": np.full(3, 0.2)}, np.array([0.3, 0.3, 1.0]))
+    check("hybrid: the voice's jaw and soft lips are scaled by the mouth size, closures and the tongue are not",
+          abs(hv["jaw_mid_open"][0] - 0.09) < 1e-6 and abs(hv["lips_l_pull"][0] - 0.06) < 1e-6 and hv["lips_together_up"][0] == 1.0 and hv["tongue_mid_lift"][0] == 0.4)
+    import audio_lips
+    al_wav = os.path.join(tmp, "al.wav")
+    fake_voice(al_wav, syllables=((0.3, 0.25), (0.7, 0.25), (1.1, 0.3)), length=1.8)
+    smp, rate_ = lipsync.load_wav(al_wav)
+    pred = audio_lips.predict_tracks(smp, rate_, int(1.8 * 30))
+    check("sound-only lips: tracks come out for both sides, between 0 and 1, without the jaw or the press",
+          "lips_l_pull" in pred and "lips_r_pull" in pred and "jaw_mid_open" not in pred and "lips_together_up" not in pred
+          and all(0 <= min(v) and max(v) <= 1 for v in pred.values()), f"{len(pred)} tracks")
+    nw = lipsync.simulate_lipsync(al_wav, profile="speech")["tracks"]
+    check("sound-only lips: with no words the model now moves the lips and tongue from the sound",
+          max(nw["lips_l_corner_up"]) > 0.1 and max(nw["tongue_mid_base_up"]) > 0.3 and max(nw["lips_l_pull"]) > 0.05)
     check("profiles: speech-kerry (one voice) and speech-cyberpunk (six characters) both load",
           lipsync.load_profile("speech-kerry")["name"] == "speech-kerry" and lipsync.load_profile("speech")["name"] == "speech-cyberpunk")
 
