@@ -85,6 +85,8 @@ The manifest lists your own files (keep them private, like packs):
 
 `creator` (optional, player heads) sets character-creator presets.
 
+A line can also carry a source video, so a live test plays next to its footage: add `"video": "/pack/live/trace/"` (a LipScan trace folder), `"label"` (text shown under the menus) and `"noMood": true` (don't apply a mood preset). Without `"clip"`, A is the whole curve file.
+
 **From a URL.** When served over http (`node serve.mjs`, with `LIPSCAN_PACKS` and `LIPSCAN_DATA` set; this computer only), files can be given in the address:
 
 ```

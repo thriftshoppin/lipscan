@@ -810,16 +810,20 @@ async function loadDemo() {
     await loadPackUrl(c.pack);
     setCreator(c.creator || {});
     await loadAnim("A", await get(l.game));
-    useClip("A", l.clip);
+    if (l.clip) useClip("A", l.clip);
     await loadAnim("B", await get(l.lipscan));
     loadAudio(await get(l.audio));
+    if (l.video) {                                       // a LipScan trace: its frames play in the corner pane
+      const vb = l.video.replace(/\/?$/, "/");
+      await loadVideo(JSON.parse(await (await get(vb + "trace.json")).text()), (file) => vb + file.split("/").map(encodeURIComponent).join("/"), c.name);
+    } else if (state.video) { state.video = null; $("videoPane").hidden = true; $("nameVideo").textContent = "Video…"; }
     $("moodA").checked = false;
-    $("moodB").checked = true;
-    setMood(l.mood && moods[l.mood] ? l.mood : "neutral");
+    $("moodB").checked = !l.noMood;
+    setMood(!l.noMood && l.mood && moods[l.mood] ? l.mood : "neutral");
     $("viewMode").value = "AB";
     layout();
     seek(0);
-    $("demoText").textContent = `"${l.text}"  ·  game mood: ${l.mood || "?"}  ·  A = game, B = LipScan (voice only)`;
+    $("demoText").textContent = l.label || `"${l.text}"  ·  game mood: ${l.mood || "?"}  ·  A = game, B = LipScan (voice only)`;
   } catch (e) { $("demoText").textContent = String(e.message || e); }
   demoBusy = false;
 }
