@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.4 (2026-10-25)
+
+A rounded mouth read from video is a purse only while the lips are shut.
+
+- **Found on a close-up singing video:** MediaPipe has one score for a rounded mouth (`mouthPucker`) and almost none for the open "O" (`mouthFunnel`, 95th percentile 0.01), and the retarget sent the pucker to the rig's purse, the closed pout. Of the frames with pucker above 0.5 (28% of the song), 55% had the lips apart (lip gap above 0.06, jaw median 0.27) and 36% had them shut. The pucker has nothing to do with the voice (correlation with loudness -0.02) and tracks a narrowed mouth (correlation with mouth width -0.83), so it is a real lip reading, but the open "O" came out as a small pursed pout. At 146 s his sung "O" is open and round; the head made a pout.
+- **Fix:** the pucker goes to the purse while the measured lip gap is under 0.04 and to the funnel as the gap opens to 0.10 (smoothstep); purse + funnel stay within the game's 0.6; a funnel MediaPipe did read is kept. Applies to the video-only and the hybrid heads. `--round-split 0` gives the old mapping. Purse above 0.3: 32% of frames to 17%; purse mean 0.28 to 0.11; funnel mean 0.07 to 0.12. Rendered clip with known purse values: correlation 0.69, unchanged (its lips barely part).
+- **Tried and dropped:** scaling the pucker down and removing held pouts. It made the head read less than the face really did.
+- **Tests:** 6 new checks (83 in test_performance.py).
+- **Limits:** one face, one song; the 0.04 to 0.10 gap range comes from that clip. The rig's funnel is a coarse stand-in for an open round mouth.
+
 ## 0.3.3 (2026-10-25)
 
 Each head can play any source.

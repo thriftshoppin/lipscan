@@ -377,5 +377,31 @@ gap[:20] = np.nan
 hg = rt.hybrid_tracks({"jaw_mid_open": gap, "lips_apart_dn": np.where(np.isnan(gap), np.nan, drop)}, voice, size=None, led=True, follow={"lips_apart_up": 1.0})
 check("video-led mouth: where no face is seen the voice's mouth carries on", np.allclose(hg["jaw_mid_open"][:20], 0.7) and np.allclose(hg["lips_apart_dn"][:20], 0.5))
 
+# ---- 0.3.4: a rounded mouth is a purse while the lips are shut and a funnel as they part ----
+n = 120
+pk = np.zeros(n)
+pk[20:50] = 0.9                                    # a pout, lips shut
+pk[70:100] = 0.9                                   # the same reading with the lips well apart: a sung "o"
+gp = np.zeros(n)
+gp[70:100] = 0.14
+tk = {"lips_l_purse": pk.copy(), "lips_r_purse": pk.copy()}
+tk = rt.split_round_mouth(tk, gp)
+check("round mouth: lips shut keeps the purse and no funnel", tk["lips_l_purse"][35] > 0.55 and tk["lips_l_funnel"][35] < 0.05,
+      f"purse {tk['lips_l_purse'][35]:.2f}, funnel {tk['lips_l_funnel'][35]:.2f}")
+check("round mouth: lips apart moves the reading to the funnel", tk["lips_l_funnel"][85] > 0.5 and tk["lips_l_purse"][85] < 0.05,
+      f"purse {tk['lips_l_purse'][85]:.2f}, funnel {tk['lips_l_funnel'][85]:.2f}")
+mid = {"lips_l_purse": pk.copy()}
+gm = np.full(n, 0.07)
+mid = rt.split_round_mouth(mid, gm)
+check("round mouth: in between it blends, and purse + funnel never pass 0.6", np.all(mid["lips_l_purse"] + mid["lips_l_funnel"] <= 0.6 + 1e-9) and 0.05 < mid["lips_l_funnel"][35] < mid["lips_l_purse"][35] + 0.6)
+vf = {"lips_l_purse": np.zeros(n), "lips_l_funnel": np.full(n, 0.3)}
+check("round mouth: a funnel MediaPipe did read is kept", np.allclose(rt.split_round_mouth(vf, np.zeros(n))["lips_l_funnel"], 0.3))
+g2 = gp.copy()
+nanp = pk.copy()
+nanp[10:15] = np.nan
+res = rt.split_round_mouth({"lips_l_purse": nanp}, g2)
+check("round mouth: frames with no face stay empty", np.isnan(res["lips_l_purse"][10:15]).all() and not np.isnan(res["lips_l_purse"][40]))
+check("round mouth: strength 0 leaves the mapped tracks alone", np.allclose(rt.split_round_mouth({"lips_l_purse": pk.copy()}, gp, 0.0)["lips_l_purse"], pk))
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

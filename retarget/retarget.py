@@ -164,6 +164,34 @@ def add_coupling(tracks, n, strength, presence):
     return tracks
 
 
+ROUND_GAP = (0.04, 0.10)     # lip gap (over the eye distance): below, the lips are shut round a pout; above, the round mouth is open
+
+
+def split_round_mouth(tracks, gap, strength=1.0):
+    """MediaPipe has one score for a rounded mouth (mouthPucker) and almost none for the open "O" (mouthFunnel: 95th percentile 0.01),
+    so a sung "o" with the jaw down came out as the rig's closed purse, a small pursed pout. Of one singer's frames with pucker
+    above 0.5, 55% had the lips apart (gap above 0.06, jaw median 0.27) and 36% had them shut. The rig has both shapes and the game
+    never stacks them (purse = lips shut and pushed out, funnel = the round open mouth), so the pucker goes to the purse while the
+    lips are shut and to the funnel as the gap opens, by the measured lip gap. Purse + funnel stay within the game's 0.6.
+    strength 0 leaves the tracks as mapped."""
+    if strength <= 0 or gap is None:
+        return tracks
+    lo, hi = ROUND_GAP
+    u = np.clip((gap - lo) / (hi - lo), 0.0, 1.0)
+    share = u * u * (3 - 2 * u) * strength                       # smoothstep: 0 shut, 1 open
+    for side in "lr":
+        pk, fk = f"lips_{side}_purse", f"lips_{side}_funnel"
+        if pk not in tracks:
+            continue
+        pucker = tracks[pk]
+        fun = np.fmax(tracks[fk], pucker * share) if fk in tracks else pucker * share
+        pur = pucker * (1 - share)
+        tot = np.nan_to_num(pur) + np.nan_to_num(fun)
+        k = np.where(tot > FORWARD_MAX, FORWARD_MAX / np.maximum(tot, 1e-9), 1.0)
+        tracks[pk], tracks[fk] = pur * k, fun * k
+    return tracks
+
+
 VIDEO_PURSE_MIN = 0.03       # below this (95th percentile) the video shows no pucker at all in this clip: the voice's stays
 VIDEO_PURSE_TARGET = 0.15    # a small face reads pucker weakly (0.06 where the true value was 0.32, correlation still 0.69): lift it to this
 VIDEO_PURSE_GAIN_MAX = 4.0
@@ -277,7 +305,7 @@ def jl(a, nd=4):
 
 
 def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True, size=True, mouth_from="auto",
-             articulation=None, expressiveness=None, coupling=1.0, jaw_presence=1.0, profile="speech"):
+             articulation=None, expressiveness=None, coupling=1.0, jaw_presence=1.0, profile="speech", round_split=1.0):
     folder = os.path.abspath(folder)
     perf = json.load(open(os.path.join(folder, "performance.json"), encoding="utf-8"))
     if perf.get("format") != "lipscan-performance/1":
@@ -300,6 +328,7 @@ def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hy
         return {**base, "target": "arkit52", "tracks": {k: jl(chan[k]) for k in BLENDSHAPES if k != "_neutral"},
                 "head": {k: jl(chan[c], 2) for k, c in (("yaw", "headYaw"), ("pitch", "headPitch"), ("roll", "headRoll"))}}
     tracks, unused = apply_mapping(chan, mapping)
+    tracks = split_round_mouth(tracks, chan.get("lipGap"), round_split)
     mode = "video"
     if hybrid and trace.get("audio"):
         dials = {k: v for k, v in (("articulation", articulation), ("expressiveness", expressiveness)) if v is not None}
@@ -342,6 +371,8 @@ def main():
     ap.add_argument("--profile", default="speech", help="voice profile for the hybrid's voice side")
     ap.add_argument("--mouth-from", choices=("auto", "video", "voice"), default="auto",
                     help="(hybrid) who leads the jaw and lip separation: video when it reads the mouth at the rig's scale (auto), always, or never")
+    ap.add_argument("--round-split", type=float, default=1.0, help="how much of the video's rounded-mouth reading (pucker) goes to the open funnel "
+                    "instead of the closed purse as the lips part (0 = all to the purse, as mapped; default 1)")
     ap.add_argument("--no-size", action="store_true", help="(hybrid) don't scale the voice's jaw and lips by the mouth size seen in the video")
     ap.add_argument("--video-only", action="store_true",
                     help="read the mouth from the video too. Default is a hybrid: jaw, lips, tongue and neck from the voice, "
@@ -350,7 +381,8 @@ def main():
     a = ap.parse_args()
     res = retarget(a.folder, a.mapping, a.export, not a.no_tongue, hybrid=not a.video_only, size=not a.no_size, mouth_from=a.mouth_from,
                    articulation=a.articulation, expressiveness=a.expressiveness, coupling=min(2.0, max(0.0, a.coupling)),
-                   jaw_presence=min(1.3, max(0.7, a.jaw_presence if a.jaw_presence is not None else rig_presence(a.rig))), profile=a.profile)
+                   jaw_presence=min(1.3, max(0.7, a.jaw_presence if a.jaw_presence is not None else rig_presence(a.rig))), profile=a.profile,
+                   round_split=min(1.0, max(0.0, a.round_split)))
     if a.out == "-":
         json.dump(res, sys.stdout)
         return

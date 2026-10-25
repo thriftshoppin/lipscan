@@ -122,6 +122,8 @@ Lips pushed forward: where the video reads pucker, the hybrid's purse is the vid
 
 Lip separation: when the video's jaw reaches the rig's scale (95th percentile 0.3 or more), the hybrid's jaw, lower-lip drop, upper lip and chin come from the video instead of the voice, and the lip tracks that ride on the jaw ride on the video's jaw; the voice keeps closures, tongue and neck. `--mouth-from auto|video|voice` (auto by default). A small or turned face reads weakly and stays voice-led. Numbers in docs/MEASUREMENTS.md.
 
+Rounded mouths: MediaPipe's `mouthPucker` goes to the rig's purse while the lip gap says the lips are shut (under 0.04) and to the funnel as they part (to 0.10), so a sung "o" is an open round mouth instead of a pout. `--round-split 0` maps the pucker to the purse as before.
+
 ## In the viewer
 
 The face viewer (built with `claude/skills/cyberpunk-face-viewer`) plays `retarget-cyberpunk.json` in slot A or B:
