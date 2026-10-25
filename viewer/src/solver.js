@@ -56,6 +56,9 @@ export class FaceSolver {
     this.dR = Array.from({ length: n }, () => new THREE.Quaternion());
     this.world = Array.from({ length: n }, () => new THREE.Matrix4());
     this.deform = Array.from({ length: n }, () => new THREE.Matrix4());
+    this.bindWorld = this.restWorld.map((W) => W.clone()); // the rig as built; meshes are bound to this
+    this.baseT = this.restT.map((t) => t.clone());
+    this.baseR = this.restR.map((r) => r.clone());
     this.restWorldQ = this.restWorld.map((W) => new THREE.Quaternion().setFromRotationMatrix(W));
     this.headBones = [["Neck", 0.3], ["Neck1", 0.3], ["Head", 0.4]]
       .map(([name, share]) => [this.boneIndex.get(name), share]).filter(([i]) => i !== undefined);
@@ -71,6 +74,31 @@ export class FaceSolver {
       this._q.slerpQuaternions(IDENTITY, x.q, w);
       this.dR[x.bone].multiply(this._q);
       this.dT[x.bone].addScaledVector(x.t, w);
+    }
+  }
+
+  // Character-creator face options move face joints: offsets = Map(boneIndex -> [tx, ty, tz, qx, qy, qz, qw]), a
+  // world-space change from the bind pose (REDengine axes). Rebuilds the rest pose, so every face pose works around
+  // the joints' new places. An empty map restores the rig as built.
+  setRestOffsets(offsets) {
+    const n = this.boneNames.length;
+    const world = [];
+    const m = new THREE.Matrix4();
+    for (let i = 0; i < n; i++) {
+      const o = offsets.get(i);
+      world.push(o ? m.compose(new THREE.Vector3(o[0], o[1], o[2]), new THREE.Quaternion(o[3], o[4], o[5], o[6]), this._s).clone().multiply(this.bindWorld[i])
+                   : this.bindWorld[i].clone());
+    }
+    for (let i = 0; i < n; i++) {
+      if (!offsets.size) { this.restT[i].copy(this.baseT[i]); this.restR[i].copy(this.baseR[i]); }
+      else {
+        const p = this.parents[i];
+        const local = p >= 0 ? world[p].clone().invert().multiply(world[i]) : world[i].clone();
+        local.decompose(this.restT[i], this.restR[i], new THREE.Vector3());
+      }
+      this.restWorld[i].copy(world[i]);
+      this.restWorldInv[i].copy(world[i]).invert();
+      this.restWorldQ[i].setFromRotationMatrix(world[i]);
     }
   }
 

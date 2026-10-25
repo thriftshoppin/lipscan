@@ -109,7 +109,7 @@ async function buildHead(slot) {
       // Like the game, shared meshes (eyes, teeth) sit on THIS character's skeleton: keep the exported bone's
       // orientation but put it at the rig's rest position (RED -> glTF axes: x, z, -y).
       const restWorld = holderInv.clone().multiply(b.matrixWorld);           // relative to the holder
-      const p = new THREE.Vector3().setFromMatrixPosition(state.solver.restWorld[idx]);
+      const p = new THREE.Vector3().setFromMatrixPosition(state.solver.bindWorld[idx]); // meshes are bound to the rig as built
       restWorld.setPosition(p.x, p.z, -p.y);
       const parentInv = holderInv.clone().multiply(b.parent.matrixWorld).invert();
       b.matrixAutoUpdate = false;
@@ -158,6 +158,7 @@ async function loadCharacter(files) {
   pack.tracks.forEach((n, i) => { if (posed.has(i)) sel.add(new Option(n, i)); });
   applyVisibility();
   layout();
+  setupCreator(pack.creator);
   for (const s of ["A", "B"]) if (state.anim[s]) computeCurve(s);
   $("drop").style.display = "none";
   $("drop").querySelector("div").innerHTML = "<b>Drop an animation</b><br>a WolvenKit <code>.anims</code> glTF export or a LipScan <code>.json</code>, or the voice audio.";
@@ -227,6 +228,65 @@ function sampleValues(slot, t, out) {
   }
   applyMood(slot, out);
   if (state.tryTrack >= 0 && state.tryValue > 0) out[state.tryTrack] = Math.max(out[state.tryTrack], state.tryValue); // pose tester
+}
+
+// ---------------- character creator (player heads) ----------------
+// One menu per face region (eyes, nose, mouth, jaw, ears): the base face or one of the game's 20 presets. A choice
+// turns on that preset's morph target for the region (h<PP><R>) on every mesh that has it, and moves the face
+// joints that belong to the region to the preset's places, so poses and lipsync work on the new face.
+const creatorChoice = {};
+const REGION_LABEL = { eyes: "Eyes", nose: "Nose", mouth: "Mouth", jaw: "Jaw", ear: "Ears" };
+function setupCreator(c) {
+  const box = $("creatorBox");
+  const holder = $("creator");
+  holder.innerHTML = "";
+  for (const k of Object.keys(creatorChoice)) delete creatorChoice[k];
+  box.hidden = !c;
+  if (!c) return;
+  c.regions.forEach((r) => {
+    const label = document.createElement("label");
+    label.textContent = REGION_LABEL[r] || r;
+    const sel = document.createElement("select");
+    sel.id = `cc_${r}`;
+    sel.add(new Option("base", ""));
+    for (const p of c.presets) sel.add(new Option(`${+p}`, p));
+    sel.addEventListener("change", () => { creatorChoice[r] = sel.value; applyCreator(); });
+    label.htmlFor = sel.id;
+    holder.append(label, sel);
+  });
+  $("creatorInfo").textContent = `${c.presets.length} presets per region, from the game's character creator. Joints follow their region's preset (an approximation).`;
+}
+function applyCreator() {
+  const c = state.pack && state.pack.creator;
+  if (!c) return;
+  const want = new Set();
+  c.regions.forEach((r, i) => { if (creatorChoice[r]) want.add(`h${creatorChoice[r]}${i + 1}`); });
+  for (const h of Object.values(state.heads)) {
+    if (!h) continue;
+    h.traverse((o) => {
+      if (!o.isMesh || !o.morphTargetDictionary) return;
+      for (const [name, i] of Object.entries(o.morphTargetDictionary)) o.morphTargetInfluences[i] = want.has(name.slice(0, 4)) ? 1 : 0;
+    });
+  }
+  const offsets = new Map();
+  for (const [bone, region] of Object.entries(c.boneRegion)) {
+    const p = creatorChoice[region];
+    const d = p && c.boneDeltas[p] && c.boneDeltas[p][bone];
+    const i = state.solver.boneIndex.get(bone);
+    if (d && i !== undefined) offsets.set(i, d);
+  }
+  state.solver.setRestOffsets(offsets);
+  render();
+}
+function setCreator(choice) {
+  const c = state.pack && state.pack.creator;
+  if (!c) return;
+  for (const r of c.regions) {
+    const v = choice[r] ? String(choice[r]).padStart(2, "0") : "";
+    creatorChoice[r] = c.presets.includes(v) ? v : "";
+    $(`cc_${r}`).value = creatorChoice[r];
+  }
+  applyCreator();
 }
 
 // ---------------- mood ----------------
@@ -494,6 +554,11 @@ $("fAudio").addEventListener("change", (e) => e.target.files[0] && loadAudio(e.t
 $("fVideo").addEventListener("change", (e) => loadVideoFolder([...e.target.files]).catch(report));
 $("headMotion").addEventListener("change", () => render());
 fillMoods();
+$("creatorReset").addEventListener("click", () => setCreator({}));
+$("creatorRandom").addEventListener("click", () => {
+  const c = state.pack && state.pack.creator;
+  if (c) setCreator(Object.fromEntries(c.regions.map((r) => [r, c.presets[Math.floor(Math.random() * c.presets.length)]])));
+});
 $("mood").addEventListener("change", (e) => {
   if (e.target.value === "__custom") { $("fMood").click(); return; }
   setMood(e.target.value);
@@ -601,7 +666,7 @@ function useClip(slot, want) {
 }
 
 // When served over http, files can be given in the address:
-//   ?pack=folder/&a=file&b=file&audio=file&video=trace-folder/&clip=name&clipB=name&view=ab&t=seconds&head=0&cam=front&mood=scowl
+//   ?pack=folder/&a=file&b=file&audio=file&video=trace-folder/&clip=name&clipB=name&view=ab&t=seconds&head=0&cam=front&mood=scowl&jaw=7&eyes=3 (player heads)
 //   clip (or clipA) picks A's clip, clipB picks B's: a bare id, the full name or the list label. view: a, b or ab.
 async function fromUrl() {
   const q = new URLSearchParams(location.search);
@@ -623,6 +688,8 @@ async function fromUrl() {
   }
   if (q.get("head") === "0") $("headMotion").checked = false;
   if (q.get("mood") && moods[q.get("mood")]) setMood(q.get("mood"));
+  // character creator: &eyes=3&nose=12&mouth=7&jaw=7&ear=1
+  if (state.pack.creator && state.pack.creator.regions.some((r) => q.get(r))) setCreator(Object.fromEntries(state.pack.creator.regions.map((r) => [r, q.get(r)])));
   const view = (q.get("view") || (state.clip.B ? "ab" : "")).toUpperCase();
   if (["A", "B", "AB"].includes(view)) { $("viewMode").value = view; layout(); }
   if (q.get("cam") === "front") { $("frontCam").checked = true; $("frontCam").dispatchEvent(new Event("change")); }

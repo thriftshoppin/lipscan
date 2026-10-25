@@ -20,6 +20,11 @@ Polish from a frame-by-frame review against the game.
   - **Effect:** with the right mood, the upper face's average error against the game drops from 0.147 to 0.045.
   - **Presets:** live in `profiles/moods/`.
 - **Viewer:** a **Mood** menu applies a preset to LipScan clips (A and/or B), or loads a custom preset JSON. Also the `mood=` address parameter.
+- **Viewer: V and the character creator.** For a player base head, `build_character.py` (new `creator.py`) exports the head, eyes, eyebrows and teeth with the character creator's face morphs, and records how each preset moves the face joints.
+  - **The panel:** Eyes, Nose, Mouth, Jaw and Ears (base or a preset), plus Base face and Random, and `&jaw=7` style address parameters.
+  - **What it does:** the viewer applies the morphs and rebuilds the rig's rest pose, so lipsync, moods and poses work on the new face.
+  - **Approximation:** when regions are mixed, each joint follows the region that moves its skin most.
+  - **Tested on:** male V (20 presets) and female V (21).
 - **Neck:** throat and neck tracks are held at the game's average levels while someone talks (profile `neck_during_speech`). In the game data they don't follow jaw, loudness or pitch.
 - **Fix:** `game_upper_face.py` now reads held (constant) track values. That's where the game stores a line's mood.
 - **Tests:** `test_performance.py` adds 10 checks, 36 in all:

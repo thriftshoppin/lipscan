@@ -42,6 +42,23 @@ python build_character.py --wolvenkit "<path>\WolvenKit.CLI.exe" --game "<Cyberp
 
 The pack is a folder with `character.json` plus the head, eyebrows, eyes and teeth `.glb` files. It only reads the game archives; it never changes the game.
 
+## V and the character creator
+
+Point `--head` at a player base head, and the pack gets the character creator's face options:
+
+- male V: `base\characters\head\player_base_heads\player_man_average\h0_000_pma_c__basehead\h0_000_pma_c__basehead.mesh`
+- female V: the same under `player_female_average` with `pwa`
+
+The viewer then shows a **Character creator** panel: Eyes, Nose, Mouth, Jaw and Ears, each "base" or one of the game's presets (20 for male V, 21 for female), with **Base face** and **Random** buttons. Address parameters work too: `&eyes=3&nose=12&mouth=7&jaw=7&ear=1`. Lipsync, moods and the pose tester all work on the chosen face.
+
+How it works (`creator.py`):
+
+- **Skin:** the game keeps each option as a morph target, `h<preset><region>` (for example `h074` = jaw 7), in `h0_/he_/heb_/ht_000_<pma|pwa>__morphs.morphtarget` for the head, eyes, eyebrows and teeth. The converter exports those files, with all their targets, as the pack's meshes.
+- **Joints:** each target also stores where the face joints sit for that preset. The converter records how far each joint moves from the base head, and the viewer rebuilds the rig's rest pose from that, so expressions bend around the new jaw, nose and so on.
+- **One approximation:** a preset's joint positions are shared by all five regions, so when regions are mixed (eyes 3, jaw 7) something has to decide which preset each joint follows. The game's rule isn't in the files. Here each joint follows the region whose morphs move the skin it drives most.
+
+Not included yet: skin tones, textures, makeup, scars, tattoos, hair, beards (they have morphs of their own), and body types.
+
 ## Use
 
 - **Load files:** with **Character…**, **Animation A…**, **Animation B…**, **Audio…** and **Video…** (a LipScan trace folder), or drag files and folders onto the window.

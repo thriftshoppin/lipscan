@@ -14,6 +14,11 @@ How a head's files are found (override any of them with the matching option):
   face skeleton <head name>_skeleton.rig (any archive)
   eyebrows      <head folder>\\heb_*<same suffix>.mesh
   eyes, teeth   the generic base head for the body type (ma = man average, wa = woman average, ...)
+
+Player heads (V: ...\player_base_heads\player_man_average\h0_000_pma_c__basehead\h0_000_pma_c__basehead.mesh and
+the female equivalent) also get the character creator's face options (eyes, nose, mouth, jaw, ears; 20 presets
+each): the meshes are exported with their morph targets and the face joints' moves are stored. See creator.py.
+Use --no-creator to skip that.
 """
 
 import argparse
@@ -24,6 +29,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
+from creator import add_creator
 
 ARCHIVES = ("basegame_4_appearance", "basegame_4_animation", "basegame_3_nightcity", "basegame_1_engine", "basegame_2_mainmenu")
 
@@ -131,6 +138,7 @@ def main():
     ap.add_argument("--extra", action="append", default=[], help="another .mesh to include (hair, beard...); repeatable")
     ap.add_argument("--out", required=True, help="folder to write the pack into")
     ap.add_argument("--keep-work", action="store_true", help="keep the temporary extraction folder")
+    ap.add_argument("--no-creator", action="store_true", help="player heads: don't add the character creator's face options")
     a = ap.parse_args()
 
     head = a.head.replace("/", "\\")
@@ -192,6 +200,7 @@ def main():
                 print(f"  skipped {role}: {str(e).splitlines()[0]}")
         if not any(f["role"] == "head" for f in files):
             sys.exit("The head mesh couldn't be exported.")
+        creator = None if a.no_creator else add_creator(g, run, head, a.out, files)
 
         pack = {
             "format": "lipscan-character/1", "name": base,
@@ -200,6 +209,8 @@ def main():
             "space": "REDengine (Z up); glTF meshes are Y up: gltf = (x, z, -y)",
             "tracks": tracks, "referenceTracks": [r6(x) for x in ref], "bones": bones, "parts": parts, "meshes": files,
         }
+        if creator:
+            pack["creator"] = creator
         with open(os.path.join(a.out, "character.json"), "w", encoding="utf-8") as fh:
             json.dump(pack, fh, separators=(",", ":"))
         print(f"wrote {a.out} ({len(files)} meshes)")

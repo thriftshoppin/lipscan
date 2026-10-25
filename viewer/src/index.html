@@ -49,6 +49,7 @@
   aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 12px 0 6px; }
   aside h2:first-child { margin-top: 0; }
   .row { display: flex; gap: 6px; align-items: center; margin: 4px 0; flex-wrap: wrap; }
+  .creator { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; margin: 4px 0; }
   .bar { display: grid; grid-template-columns: 1fr 60px; gap: 6px; align-items: center; font-size: 11.5px; margin: 2px 0; }
   .bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar i { display: block; height: 7px; border-radius: 4px; background: var(--accent); }
@@ -88,6 +89,12 @@
     <div class="row"><label><input type="checkbox" id="showBrows" checked> Eyebrows</label><label><input type="checkbox" id="showEyes" checked> Eyes</label><label><input type="checkbox" id="showTeeth" checked> Teeth</label></div>
     <div class="row"><label><input type="checkbox" id="wire"> Wireframe</label><label><input type="checkbox" id="frontCam"> Front camera</label></div>
     <div class="row"><label title="Head turns from a LipScan .json (video traces and the voice model)"><input type="checkbox" id="headMotion" checked> Head motion</label><label><input type="checkbox" id="showVideo" checked> Video</label></div>
+    <div id="creatorBox" hidden>
+      <h2>Character creator</h2>
+      <div id="creator" class="creator"></div>
+      <div class="row"><button id="creatorReset">Base face</button><button id="creatorRandom">Random</button></div>
+      <div id="creatorInfo" style="color:var(--muted);font-size:11.5px"></div>
+    </div>
     <h2>Mood</h2>
     <div class="row"><select id="mood" title="A held expression added to LipScan clips (game clips carry their own)" style="max-width:100%"></select></div>
     <div class="row"><label><input type="checkbox" id="moodA"> A</label><label><input type="checkbox" id="moodB" checked> B</label><input id="fMood" type="file" accept=".json" hidden></div>

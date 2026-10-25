@@ -151,6 +151,17 @@ There are three parts: `Face`, `Tongue` and `Eyes`. For each part:
 - Head motion: yaw +20 turns the face toward the character's left (the viewer's right, from the front). Pitch +15 lifts the chin. Roll +15 tilts the top of the head toward the character's left shoulder.
 - Not checked against the game itself: exact tongue placement, and the refinements listed under "Not used by the basic solver". Say so if asked.
 
+## Player heads: the character creator
+- **Where the options live.** V's base heads are `base\characters\head\player_base_heads\player_man_average\h0_000_pma_c__basehead\` (female: `player_female_average`, `pwa`). The creator's face options are morph-target files next to that folder: `h0_`, `he_`, `heb_` and `ht_000_<pma|pwa>__morphs.morphtarget` for the head, eyes, eyebrows and teeth.
+- **Target names.** Targets are named `h<PP><R>`: PP is the preset (01–20 for male V, 01–21 for female), and R the region (1 eyes, 2 nose, 3 mouth, 4 jaw, 5 ear). WolvenKit exports them with `export` (`MorphTargetExportArgs__IsBinary=true`): one skinned mesh with every target, the names in `extras.targetNames`.
+- **Joint positions.** Each target also has `boneRigMatrices`, the face joints' inverse bind matrices for that preset. Inverse the transpose to get a REDengine world matrix. They're identical for all five regions of a preset. A joint's move is Δ = Wpreset · Wbase⁻¹, where Wbase comes from the base mesh's own `boneRigMatrices`.
+- **In the viewer:**
+  1. Set the chosen targets' morph influences to 1.
+  2. Rebuild the solver's rest pose with W0′ = Δ · W0 for the moved joints, then re-derive their local transforms.
+  3. Keep the meshes bound to the original W0 (D is measured from W0′, so at rest the mesh shows just the morph).
+- **Mixed regions.** Which preset a joint follows isn't stored. A reasonable rule: the region whose morphs move the vertices it drives most.
+- **Checks:** jaw options visibly change the chin and jaw line. The jaw opening on a changed face stays clean. One pose at full strength looks the same on the base and the changed face.
+
 ## Privacy reminders for the user
 - **Character packs and built viewers contain or reference game data.** Keep them private and out of repositories.
 - **The converter only reads the game archives.** It never modifies the game.
