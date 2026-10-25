@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 (2026-10-25)
+
+Dials for how crisp the mouth is and how much the face follows the voice's tone, cheeks and chin that follow the lips and jaw, and a mouth reading that keeps fast closures.
+
+- **Articulation** (`--articulation`, 0.0-2.0, default 1.0 = the 0.2.5 output exactly). Scales how high and how fast the sharp consonants go: p/b/m closures, t/d/k/g tongue, f/v tuck, oo/w purse. Against the game's lines the p/b/m press is 133 ms wide at 1.0 (the game's own width) and 100 ms at 1.5. A profile may set its own (`speech-crisp` = 1.5); the command line overrides it. The loudness-driven jaw is not touched.
+- **Expressiveness** (`--expressiveness`, 0.0-2.0, default 1.0 = as before). Scales the voice-driven upper face (brow raises, frown, squint, head nods). Above 1.0 the strongest values bend toward 1.0 instead of flattening, so the shape holds.
+- **Tone** (`upper_face.prosody_*` in a profile, off in every existing profile): a prosody track (pitch rise, tension, calm) from the voice. Rising pitch lifts the brows, loud tense stretches frown, squint and lift the cheeks, calm stretches relax. Against the game's faces it is neutral to slightly worse in speech and slightly better in singing, so it ships as the opt-in profiles `speech-expressive` and `singing-expressive`.
+- **Coupling** (`--coupling`, `--jaw-presence`, `--rig character.json`; new `model/coupling.py`): cheek puff, lip puff, nose, chin and lip suck follow the mouth and jaw, learned from the game and tested on characters held out of the fit (correlation 0.32-0.46 where it was 0.00-0.28 without). The cheek's smile fold, the Duchenne squint and the press puff are authored, not measured, because the game never uses the cheek tracks. A face's jaw width and chin length (read from the rig) scale it: 0.93 to 1.11 across the game's characters, Jackie highest. The mouth and jaw tracks themselves are not changed by it.
+- **Mouth reading from video** (`analyze/performance.py`): mouth shapes now get their own lighter smoothing (3 Hz base, beta 2) in place of the 1.5 Hz the head and brows use, which was flattening fast closures. Fast motion kept on the test recording: jaw 0.47 to 0.70, pucker 0.60 to 0.83, mouthClose 0.34 to 0.53. The match with the voice dropped a little (jaw 0.42 to 0.39), as expected from a signal that now follows faster mouth movement than the voice's smooth loudness does. Also records `lipGap` and `mouthWidth` from the landmarks. `--legacy-mouth` gives the old behaviour; `--refine` (an enlarged-crop second look) is available but off, because it lowered the match on the test clip.
+- **Hybrid retarget:** takes `--articulation`, `--expressiveness`, `--coupling`, `--jaw-presence`, `--rig`, `--profile`, adds the coupling on the merged mouth, and prints to the terminal with `--out -`.
+- **Settings sweep:** `analyze.py --sweep` scores each dial against a real face in a recording (shape, size, crispness) and writes `sweep.json`.
+- **Viewer:** three sliders (articulation, expressiveness, cheek/jaw follow) re-run the model on the dev server (`/api/gen`) while a line keeps playing; jaw presence is read from the loaded character.
+- **Tests:** 21 new checks (25 in test_model.py, 64 in test_performance.py) and `test/golden.py`, which pins the default output of seven cases so a change that alters it fails the build.
+- **Limits:** the one real-face recording available is an acted skit with no captions, so the sweep cannot pick a best value (the jaw match stays 0.41, the dials move the mouth match by under 0.01) and the defaults stay at 1.0. Singing has no real-face reference at all. Cheeks cannot be checked against the game. Closures cannot be checked on the rendered test clip (its mouth barely closes).
+
 ## 0.2.5 (2026-10-25)
 
 Better lips for the hybrid, found by watching it next to the real video.

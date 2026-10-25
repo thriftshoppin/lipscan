@@ -91,7 +91,12 @@
       "loud_squint / loud_cheek": "squint and cheek raise on loud passages (effort, singing)",
       "gaze_down": "eyes rest this far down (eye_*_dir_dn)",
       "head_nod_deg / head_nods_per_minute": "chin dips on stressed syllables",
-      "head_sway_deg": "slow head sway"
+      "head_sway_deg": "slow head sway",
+      "prosody_raise": "rising pitch lifts the brows (weight). Against the game's faces: helped singing (frown corr 0.32 -> 0.35), hurt speech (0.232 -> 0.189). Off by default",
+      "prosody_tense": "loud, fast, high delivery frowns and squints further (weight). No effect on the match to the game's faces (0.230 -> 0.233). Off by default",
+      "prosody_calm": "calm, low-energy stretches relax the face (weight). No effect on the match to the game's faces in speech. Off by default",
+      "prosody_cheek": "tense delivery lifts the cheeks (weight); authored, not measured (the game's dialogue never moves the cheek tracks). Off by default",
+      "prosody_nose": "tense delivery wrinkles the nose (weight); authored, not measured. Off by default"
     },
     "blinks_per_minute": 18.7,
     "blink_peak": 0.9,

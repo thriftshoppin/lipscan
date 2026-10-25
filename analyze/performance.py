@@ -54,7 +54,12 @@ BLENDSHAPES = [
 ]
 HEAD = ["headYaw", "headPitch", "headRoll", "headX", "headY", "headZ"]
 GAZE = ["gazeLeftYaw", "gazeLeftPitch", "gazeRightYaw", "gazeRightPitch"]
-CHANNELS = BLENDSHAPES + HEAD + GAZE
+# Lip geometry, as ratios of the face's own eye distance (so the zoom doesn't matter; nothing here identifies anyone):
+#   lipGap    the gap between the inner lips        mouthWidth  the width of the mouth
+# Recorded for analysis; nothing is mapped from them. A p/b/m closure detector built on lipGap scored only 0.18-0.36 against known
+# presses, with many false alarms, so it isn't used (MediaPipe's own mouthClose barely fires on a press either).
+LIPGEO = ["lipGap", "mouthWidth"]
+CHANNELS = BLENDSHAPES + HEAD + GAZE + LIPGEO
 
 # How far the eyes turn at eyeLook* = 1, in degrees. MediaPipe doesn't publish this; these are typical eye ranges.
 GAZE_DEG = {"yaw": 35.0, "pitch": 25.0}
@@ -63,9 +68,19 @@ GAZE_DEG = {"yaw": 35.0, "pitch": 25.0}
 FAST = {"eyeBlinkLeft", "eyeBlinkRight", "eyeSquintLeft", "eyeSquintRight", "eyeWideLeft", "eyeWideRight"} | \
        {c for c in BLENDSHAPES if c.startswith("eyeLook")} | set(GAZE)
 
+# Mouth shapes (jaw, lips, cheeks, nose) are fast too: a p/b/m closure lasts about 130 ms, and at the slow filter's 1.5 Hz base cutoff it
+# is mostly smoothed away. They get their own lighter setting, between the slow channels (head pose, brows) and the eyes.
+MOUTH_PREFIXES = ("jaw", "mouth", "cheek", "nose")
+MOUTH = {c for c in BLENDSHAPES if c.startswith(MOUTH_PREFIXES)} | {"lipGap", "mouthWidth"}
+
 DEFAULTS = {
     "lock_face": True, "fill_gaps_s": 0.2, "neutral": True, "neutral_head": True, "neutral_fraction": 0.1, "smooth": True,
-    "one_euro": {"min_cutoff_hz": 1.5, "beta": 0.5, "fast_min_cutoff_hz": 6.0, "fast_beta": 4.0, "d_cutoff_hz": 1.0},
+    "one_euro": {"min_cutoff_hz": 1.5, "beta": 0.5, "fast_min_cutoff_hz": 6.0, "fast_beta": 4.0, "d_cutoff_hz": 1.0,
+                 "mouth_min_cutoff_hz": 3.0, "mouth_beta": 2.0},
+    # an optional second look at the locked face on an enlarged crop (blendshapes from the crop, head pose from the whole frame).
+    # Off by default: on a clip with known mouth values it LOWERED the match (jaw 0.69 -> 0.60), so it isn't worth the time.
+    "refine": False, "refine_scale": 1.8, "refine_px": 384,
+    "mouth_smoothing": True,
 }
 
 
@@ -139,7 +154,30 @@ class FaceLock:
 # ----------------------------------------------------------------------------
 # Tracking
 # ----------------------------------------------------------------------------
-def track(folder, trace, lock=True):
+def lip_geometry(lm):
+    """(gap between the inner lips, mouth width), each divided by the distance between the outer eye corners."""
+    eyes = math.dist((lm[33].x, lm[33].y), (lm[263].x, lm[263].y)) or 1e-6
+    return (math.dist((lm[13].x, lm[13].y), (lm[14].x, lm[14].y)) / eyes,
+            math.dist((lm[61].x, lm[61].y), (lm[291].x, lm[291].y)) / eyes)
+
+
+def crop_face(path, landmarks, scale, px):
+    """The locked face on an enlarged square crop, as a MediaPipe image (None if it can't be cut)."""
+    import mediapipe as mp
+    from PIL import Image
+    im = Image.open(path).convert("RGB")
+    w, h = im.size
+    xs, ys = [p.x for p in landmarks], [p.y for p in landmarks]
+    cx, cy = (min(xs) + max(xs)) / 2 * w, (min(ys) + max(ys)) / 2 * h
+    side = scale * max((max(xs) - min(xs)) * w, (max(ys) - min(ys)) * h)
+    if side < 24:
+        return None
+    box_ = (int(cx - side / 2), int(cy - side / 2), int(cx + side / 2), int(cy + side / 2))
+    out = im.crop(box_).resize((px, px), Image.LANCZOS)              # PIL pads outside the frame with black
+    return mp.Image(image_format=mp.ImageFormat.SRGB, data=np.asarray(out))
+
+
+def track(folder, trace, lock=True, refine=False, refine_scale=1.8, refine_px=384):
     """Runs MediaPipe on every frame. Returns (times, raw values [frames x channels] with NaN gaps, confidence)."""
     import mediapipe as mp
     from mediapipe.tasks.python import BaseOptions, vision
@@ -149,6 +187,11 @@ def track(folder, trace, lock=True):
     lm_opts = vision.FaceLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=LANDMARKER), running_mode=vision.RunningMode.VIDEO,
         num_faces=4 if lock else 1, output_face_blendshapes=True, output_facial_transformation_matrixes=True)
+    crop_lm = None
+    if refine:                                          # still images, one face: no tracking state across crops
+        crop_lm = vision.FaceLandmarker.create_from_options(vision.FaceLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=LANDMARKER), running_mode=vision.RunningMode.IMAGE, num_faces=1,
+            output_face_blendshapes=True))
     detector = None
     if os.path.exists(DETECTOR):
         detector = vision.FaceDetector.create_from_options(vision.FaceDetectorOptions(
@@ -163,6 +206,7 @@ def track(folder, trace, lock=True):
     faces = np.zeros(len(frames), dtype=int)
     locker = FaceLock()
     last_ms = -1
+    refined = 0
     with vision.FaceLandmarker.create_from_options(lm_opts) as lm:
         for k, fr in enumerate(frames):
             ms = max(last_ms + 1, round(times[k] * 1000))
@@ -174,9 +218,18 @@ def track(folder, trace, lock=True):
             i = locker.pick(boxes) if lock else (0 if boxes else None)
             if i is not None:
                 bs = {b.category_name: b.score for b in res.face_blendshapes[i]}
+                lms = res.face_landmarks[i]
+                if crop_lm is not None:
+                    cimg = crop_face(os.path.join(folder, fr["file"]), res.face_landmarks[i], refine_scale, refine_px)
+                    cres = crop_lm.detect(cimg) if cimg is not None else None
+                    if cres is not None and cres.face_blendshapes:          # the crop's reading replaces the whole-frame one
+                        bs = {b.category_name: b.score for b in cres.face_blendshapes[0]}
+                        lms = cres.face_landmarks[0]
+                        refined += 1
                 row = [bs.get(c, np.nan) for c in BLENDSHAPES]
                 row += head_pose(res.facial_transformation_matrixes[i]) if res.facial_transformation_matrixes else [np.nan] * 6
                 row += gaze(bs)
+                row += list(lip_geometry(lms))
                 raw[k] = row
                 if detector is not None:
                     det = detector.detect_for_video(img, ms).detections
@@ -188,6 +241,9 @@ def track(folder, trace, lock=True):
                 print(f"  tracking: frame {k + 1} of {len(frames)}", flush=True)
     if detector is not None:
         detector.close()
+    if crop_lm is not None:
+        crop_lm.close()
+        print(f"  enlarged-crop pass used on {refined} of {len(frames)} frames", flush=True)
     return times, raw, conf, faces
 
 
@@ -283,8 +339,11 @@ def clean(times, raw, settings):
         e = settings["one_euro"]
         for c, name in enumerate(CHANNELS):
             fast = name in FAST
-            v[:, c] = one_euro(times, v[:, c], e["fast_min_cutoff_hz"] if fast else e["min_cutoff_hz"],
-                               e["fast_beta"] if fast else e["beta"], e["d_cutoff_hz"])
+            if name in MOUTH and settings.get("mouth_smoothing", True):         # mouth shapes: lighter than slow channels
+                mc, mb = e.get("mouth_min_cutoff_hz", e["min_cutoff_hz"]), e.get("mouth_beta", e["beta"])
+            else:
+                mc, mb = (e["fast_min_cutoff_hz"], e["fast_beta"]) if fast else (e["min_cutoff_hz"], e["beta"])
+            v[:, c] = one_euro(times, v[:, c], mc, mb, e["d_cutoff_hz"])
             if name in BLENDSHAPES:
                 v[:, c] = np.clip(v[:, c], 0, 1)
     return v, rest
@@ -333,7 +392,7 @@ def write(folder, trace, times, raw, values, conf, faces, rest, settings):
 def load_raw(path):
     p = json.load(open(path, encoding="utf-8"))
     nan = lambda xs: np.array([np.nan if x is None else x for x in xs], dtype=float)
-    raw = np.stack([nan(p["raw"][c]) for c in CHANNELS], axis=1)
+    raw = np.stack([nan(p["raw"].get(c, [None] * len(p["t"]))) for c in CHANNELS], axis=1)
     return np.array(p["t"]), raw, nan(p["confidence"]), np.array(p["faces_in_frame"])
 
 
@@ -346,19 +405,31 @@ def main():
     ap.add_argument("--keep-head-angle", action="store_true", help="keep head angles relative to the camera (don't subtract the median)")
     ap.add_argument("--no-smooth", action="store_true", help="no one-euro smoothing")
     ap.add_argument("--reclean", action="store_true", help="re-use the raw values in performance.json; only clean again")
+    ap.add_argument("--mouth-cutoff", type=float, help="smoothing for mouth shapes: base cutoff in Hz (default %s; lower = smoother)" % DEFAULTS["one_euro"]["mouth_min_cutoff_hz"])
+    ap.add_argument("--mouth-beta", type=float, help="smoothing for mouth shapes: how fast it opens up on quick movement (default %s)" % DEFAULTS["one_euro"]["mouth_beta"])
+    ap.add_argument("--refine", action="store_true", help="also re-read the face on an enlarged crop (slower; measured to lower the match, so off by default)")
+    ap.add_argument("--legacy-mouth", action="store_true", help="the 0.2.x behaviour: mouth channels smoothed like slow ones, no enlarged-crop pass")
     a = ap.parse_args()
     folder = os.path.abspath(a.folder)
     trace = json.load(open(os.path.join(folder, "trace.json"), encoding="utf-8"))
     settings = json.loads(json.dumps(DEFAULTS))
     settings.update(lock_face=not a.no_lock, fill_gaps_s=max(0.0, a.gap), neutral=not a.no_neutral,
                     neutral_head=not a.keep_head_angle, smooth=not a.no_smooth)
+    if a.legacy_mouth:
+        settings.update(refine=False, mouth_smoothing=False)
+    if a.refine:
+        settings["refine"] = True
+    if a.mouth_cutoff is not None:
+        settings["one_euro"]["mouth_min_cutoff_hz"] = a.mouth_cutoff
+    if a.mouth_beta is not None:
+        settings["one_euro"]["mouth_beta"] = a.mouth_beta
     existing = os.path.join(folder, "performance.json")
     if a.reclean and os.path.exists(existing):
         times, raw, conf, faces = load_raw(existing)
         settings["lock_face"] = json.load(open(existing))["settings"]["lock_face"]
     else:
         print(f"Tracking the face in {len(trace['frames'])} frames...")
-        times, raw, conf, faces = track(folder, trace, settings["lock_face"])
+        times, raw, conf, faces = track(folder, trace, settings["lock_face"], settings["refine"], settings["refine_scale"], settings["refine_px"])
     values, rest = clean(times, raw, settings)
     path, perf = write(folder, trace, times, raw, values, conf, faces, rest, settings)
     print(f"Wrote {path}: {perf['frames']} frames, face seen in {perf['face_seen'] * 100:.0f}%, "

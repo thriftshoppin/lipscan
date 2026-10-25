@@ -1,0 +1,33 @@
+{
+ "about": "Hashes of the model's default output on made-up voices (test/golden.py). Rewritten only on purpose.",
+ "cases": {
+  "text-speech": {
+   "all": "28992df33288a13c",
+   "mouth": "1cf9912dc7a62a4a"
+  },
+  "words-speech": {
+   "all": "98333125e7b72a49",
+   "mouth": "c09df6aa682d86b1"
+  },
+  "nowords-speech": {
+   "all": "497d653d106bb3de",
+   "mouth": "a77f7bc60cea0bcf"
+  },
+  "words-singing": {
+   "all": "eb16b608e223fe3e",
+   "mouth": "112dfb153ed020fb"
+  },
+  "nowords-singing": {
+   "all": "5988d94cb02e37a9",
+   "mouth": "39beb7141e6c8258"
+  },
+  "words-kerry": {
+   "all": "75665c3048b27ef8",
+   "mouth": "00699e800211d9d7"
+  },
+  "words-mood": {
+   "all": "13c2afc6b4eed40c",
+   "mouth": "7b2400a967cc9304"
+  }
+ }
+}

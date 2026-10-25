@@ -89,6 +89,13 @@
       <div class="row"><select id="demoLine" style="max-width:100%"></select></div>
       <div class="row"><button id="demoPrev">◀ Prev</button><button id="demoNext">Next ▶</button></div>
       <div id="demoText" style="font-size:12px;margin:4px 0"></div>
+      <div id="dials" hidden>
+        <h2>Voice model dials</h2>
+        <div class="row" title="How crisp the consonants are: d, t, k, g, p, b, f, v, oo. 1.0 is the model as measured."><label style="width:100%">Articulation <output id="artOut">1.00</output><input type="range" id="dialArt" min="0" max="2" step="0.05" value="1" style="width:100%"></label></div>
+        <div class="row" title="How much the face follows the tone of the voice: brows, squint, frown, nods. 1.0 is as measured."><label style="width:100%">Expressiveness <output id="expOut">1.00</output><input type="range" id="dialExp" min="0" max="2" step="0.05" value="1" style="width:100%"></label></div>
+        <div class="row" title="How much the cheeks, lip puff, nose and chin follow the lips and jaw. 1.0 is as measured."><label style="width:100%">Cheek / jaw follow <output id="cpOut">1.00</output><input type="range" id="dialCp" min="0" max="2" step="0.05" value="1" style="width:100%"></label></div>
+        <div class="row"><button id="dialReset">Reset to 1.0</button><span id="dialInfo" style="font-size:12px"></span></div>
+      </div>
     </div>
     <h2>Character</h2>
     <div id="info">No character loaded.</div>

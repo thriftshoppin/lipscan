@@ -801,7 +801,9 @@
  },
  "unmapped_sources": {
   "_neutral": "MediaPipe's 'no expression' score; nothing to drive.",
-  "tongueOut": "not produced by MediaPipe (ARKit has it); tongue tracks come from the audio model instead (retarget --tongue)."
+  "tongueOut": "not produced by MediaPipe (ARKit has it); tongue tracks come from the audio model instead (retarget --tongue).",
+  "lipGap": "lip geometry (the gap between the lips), recorded in performance.json for analysis; not a track by itself.",
+  "mouthWidth": "lip geometry; the mouth's width is already in the stretch, pucker and funnel shapes."
  },
  "unmapped_tracks": {
   "eye_l_pupil_wide / eye_r_pupil_wide / eye_l_pupil_narrow / eye_r_pupil_narrow": "MediaPipe doesn't measure pupils.",

@@ -97,15 +97,16 @@ def is_speech_track(name):
     return name.startswith("lips_") and any(k in name for k in SPEECH_LIPS)
 
 
-def audio_tracks(folder, trace, n, profile="speech"):
-    """All of the voice model's tracks for the trace's own audio (caption words when there are any), on the trace's clock."""
+def audio_tracks(folder, trace, n, profile="speech", **dials):
+    """All of the voice model's tracks for the trace's own audio (caption words when there are any), on the trace's clock.
+    dials: articulation, expressiveness (the model's own); the coupling is added afterwards, on the merged mouth."""
     import lipsync
     from analyze import caption_words
     audio = trace.get("audio")
     if not audio:
         return {}, 0
     words, _ = caption_words(folder, trace["start"], n / FPS)
-    res = lipsync.simulate_lipsync(os.path.join(folder, audio["file"]), profile=profile, words=words or None)
+    res = lipsync.simulate_lipsync(os.path.join(folder, audio["file"]), profile=profile, words=words or None, coupling=0, **dials)
     shift = round((audio.get("start", trace["start"]) - trace["start"]) * FPS)   # audio may start after the trace
     out = {}
     for k, v in res["tracks"].items():
@@ -132,6 +133,35 @@ def mouth_size(jaw, window_s=0.6, floor=0.3):
     env = np.convolve(np.pad(env, half, mode="edge"), k / k.sum(), mode="valid")[:n]
     ref = max(1e-3, float(np.percentile(env[ok], 95)))
     return np.where(ok, np.clip(env / ref, floor, 1.0), 1.0)
+
+
+def rig_presence(path):
+    if not path:
+        return 1.0
+    sys.path.insert(0, os.path.join(ROOT, "model"))
+    import coupling
+    return coupling.rig_presence(path)
+
+
+def add_coupling(tracks, n, strength, presence):
+    """The cheeks, lip puff, nose and chin follow the mouth and jaw (model/coupling.py), on whatever mouth the tracks now have,
+    whether it came from the voice or the video. Frames with no face stay empty."""
+    if not strength or strength <= 0:
+        return tracks
+    sys.path.insert(0, os.path.join(ROOT, "model"))
+    import coupling
+    work = {k: np.nan_to_num(v).tolist() for k, v in tracks.items()}
+    before = {k: list(v) for k, v in work.items()}
+    coupling.couple(work, n, strength, presence)
+    for k, v in work.items():
+        new = np.array(v, dtype=float)
+        if k not in tracks:
+            tracks[k] = new
+        elif list(v) != before.get(k):
+            old = tracks[k]
+            merged = np.fmax(old, new)
+            tracks[k] = np.where(np.isnan(old) & (new == 0), np.nan, merged)
+    return tracks
 
 
 def hybrid_tracks(video, voice, size=None):
@@ -177,7 +207,8 @@ def jl(a, nd=4):
     return [None if (isinstance(x, float) and math.isnan(x)) or (hasattr(x, "dtype") and np.isnan(x)) else round(float(x), nd) for x in a]
 
 
-def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True, size=True):
+def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True, size=True,
+             articulation=None, expressiveness=None, coupling=1.0, jaw_presence=1.0, profile="speech"):
     folder = os.path.abspath(folder)
     perf = json.load(open(os.path.join(folder, "performance.json"), encoding="utf-8"))
     if perf.get("format") != "lipscan-performance/1":
@@ -202,7 +233,8 @@ def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hy
     tracks, unused = apply_mapping(chan, mapping)
     mode = "video"
     if hybrid and trace.get("audio"):
-        voice, nwords = audio_tracks(folder, trace, n)
+        dials = {k: v for k, v in (("articulation", articulation), ("expressiveness", expressiveness)) if v is not None}
+        voice, nwords = audio_tracks(folder, trace, n, profile, **dials)
         tracks = hybrid_tracks(tracks, voice, mouth_size(chan["jawOpen"]) if size else None)
         mode = "hybrid"
         base["hybrid"] = {"mouth": "voice model" + (f" with {nwords} caption words" if nwords else " (no words: jaw, tongue and neck only)"),
@@ -210,6 +242,8 @@ def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hy
     elif tongue:
         for k, v in tongue_from_audio(folder, trace, n).items():
             tracks[k] = np.where(face_seen, v, np.nan)
+    tracks = add_coupling(tracks, n, coupling, jaw_presence)
+    base["settings"] = {"articulation": articulation, "expressiveness": expressiveness, "coupling": coupling, "jaw_presence": jaw_presence}
     out = {**base, "target": "cyberpunk-raw", "mapping": os.path.basename(mapping_path),
            "tracks": {k: jl(v) for k, v in sorted(tracks.items())},
            "head": {k: jl(v, 2) for k, v in head_curves(chan, mapping).items()},
@@ -227,13 +261,24 @@ def main():
     ap.add_argument("--mapping", default=DEFAULT_MAPPING)
     ap.add_argument("--export", choices=["raw", "cyberpunk", "arkit52"], default="raw")
     ap.add_argument("--no-tongue", action="store_true", help="(video-only mode) don't add tongue tracks from the audio model")
+    ap.add_argument("--articulation", type=float, help="the voice model's articulation dial (0.0-2.0; default: the profile's)")
+    ap.add_argument("--expressiveness", type=float, help="the voice model's expressiveness dial (0.0-2.0; default: the profile's)")
+    ap.add_argument("--coupling", type=float, default=1.0, help="how strongly the cheeks, lip puff, nose and chin follow the mouth (0.0-2.0, default 1.0)")
+    ap.add_argument("--jaw-presence", type=float, default=None, help="how much this face's jaw shows, from the rig (0.7-1.3, default 1.0)")
+    ap.add_argument("--rig", help="a character.json: sets --jaw-presence from that face's jaw (unless given)")
+    ap.add_argument("--profile", default="speech", help="voice profile for the hybrid's voice side")
     ap.add_argument("--no-size", action="store_true", help="(hybrid) don't scale the voice's jaw and lips by the mouth size seen in the video")
     ap.add_argument("--video-only", action="store_true",
                     help="read the mouth from the video too. Default is a hybrid: jaw, lips, tongue and neck from the voice, "
                          "everything else (head, brows, eyes, blinks, gaze, smiles) from the video")
     ap.add_argument("--out")
     a = ap.parse_args()
-    res = retarget(a.folder, a.mapping, a.export, not a.no_tongue, hybrid=not a.video_only, size=not a.no_size)
+    res = retarget(a.folder, a.mapping, a.export, not a.no_tongue, hybrid=not a.video_only, size=not a.no_size,
+                   articulation=a.articulation, expressiveness=a.expressiveness, coupling=min(2.0, max(0.0, a.coupling)),
+                   jaw_presence=min(1.3, max(0.7, a.jaw_presence if a.jaw_presence is not None else rig_presence(a.rig))), profile=a.profile)
+    if a.out == "-":
+        json.dump(res, sys.stdout)
+        return
     out = a.out or os.path.join(os.path.abspath(a.folder), f"retarget-{'cyberpunk' if a.export != 'arkit52' else 'arkit52'}.json")
     with open(out, "w", encoding="utf-8") as fh:
         json.dump(res, fh, separators=(",", ":"))

@@ -122,6 +122,17 @@ Those rules became a model. To check them against real people rather than one ga
   python model\lipsync.py voice.wav --words words.json --export cyberpunk --out curves.json
   ```
   `--words` takes timed words: `[[0.42, "maybe"], [0.80, "you"], ...]`.
+- **Dials** (all 0.0 to 2.0, 1.0 = as measured; a value outside is held to the range):
+  ```
+  python model\lipsync.py voice.wav --text "the words" --articulation 1.5     # crisper p b t d k g, f v, oo w
+  python model\lipsync.py voice.wav --expressiveness 1.3 --profile speech-expressive   # the face follows the voice's tone
+  python model\lipsync.py voice.wav --coupling 1.0 --rig character.json       # cheeks, nose and chin follow the lips; bigger jaws show more
+  ```
+  - `--articulation`: how high and how fast plosives, f/v and oo/w go. 1.0 matches the game's press width (133 ms). Try 1.3 to 1.5 for a clipped voice or a deliberate delivery, 0.6 to 0.8 for mumbling. `speech-crisp` is 1.5.
+  - `--expressiveness`: scales the brow raises, frown, squint and nods. `speech-expressive` and `singing-expressive` also tie them to pitch rise and tension; the other profiles don't.
+  - `--coupling` and `--jaw-presence` (or `--rig`): see docs/MEASUREMENTS.md.
+  - A profile can set its own defaults (`"articulation"`, `"expressiveness"`, `"coupling"`); the command line wins. `retarget.py` takes the same flags for the hybrid. `analyze.py "<folder>" --sweep` tries values against a real face.
+  - In the viewer's Test set, three sliders re-run the model live next to the original (dev server only).
 
 ## See it on a real head (Cyberpunk 2077)
 

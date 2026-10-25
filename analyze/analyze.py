@@ -389,6 +389,98 @@ def save_profile(name, m, base, trace):
 
 
 # ----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# 5. Settings sweep: which articulation / expressiveness / coupling score best against a real face
+# ----------------------------------------------------------------------------
+# What is compared: the model's rig tracks against the real face's tracks mapped onto the same rig (retarget.py --video-only), so
+# sizes are comparable. Each pair is scored on shape (correlation at the best lag within +-4 frames), size (the model's 90th
+# percentile of the track against the real face's, 1.0 = same) and, for mouth pairs, crispness (how fast it moves for its size).
+PAIRS = {
+    "jaw": (["jaw_mid_open"], "mouth"),
+    "purse": (["lips_l_purse", "lips_r_purse"], "mouth"),
+    "smile": (["lips_l_corner_up", "lips_r_corner_up"], "mouth"),
+    "stretch": (["lips_l_stretch", "lips_r_stretch", "lips_l_pull", "lips_r_pull"], "mouth"),
+    "brow raise": (["eye_l_brows_raise_in", "eye_r_brows_raise_in"], "face"),
+    "frown": (["eye_l_brows_lower", "eye_r_brows_lower"], "face"),
+    "squint": (["eye_l_oculi_squint_inner", "eye_r_oculi_squint_inner"], "face"),
+    "cheek": (["lips_l_nasolabialDeepener", "lips_r_nasolabialDeepener"], "face"),
+}
+
+
+def _avg(tracks, names, n):
+    cols = [np.array([np.nan if x is None else x for x in tracks[k]], float) for k in names if k in tracks]
+    if not cols:
+        return None
+    cols = [np.pad(c, (0, max(0, n - len(c))), constant_values=np.nan)[:n] for c in cols]
+    return np.nanmean(np.stack(cols), axis=0)
+
+
+def _best_lag_corr(a, b, span=4):
+    best = (float("nan"), 0)
+    for lag in range(-span, span + 1):
+        x, y = (a[lag:], b[:len(b) - lag]) if lag >= 0 else (a[:lag], b[-lag:])
+        m = min(len(x), len(y))
+        ok = ~(np.isnan(x[:m]) | np.isnan(y[:m]))
+        if ok.sum() > 15 and x[:m][ok].std() > 1e-6 and y[:m][ok].std() > 1e-6:
+            c = float(np.corrcoef(x[:m][ok], y[:m][ok])[0, 1])
+            if math.isnan(best[0]) or c > best[0]:
+                best = (c, lag)
+    return best
+
+
+def sweep_scores(model_tracks, reference_tracks, n):
+    """{pair: {corr, size, crisp}} for one model result against one reference (both {track: [values per frame]})."""
+    out = {}
+    for name, (tracks, kind) in PAIRS.items():
+        m, r = _avg(model_tracks, tracks, n), _avg(reference_tracks, tracks, n)
+        if m is None or r is None or np.nanstd(r) < 1e-4:
+            continue
+        c, _ = _best_lag_corr(np.nan_to_num(m), r)
+        p90 = lambda x: float(np.nanpercentile(x, 90)) + 1e-6
+        speed = lambda x: float(np.nanpercentile(np.abs(np.diff(np.nan_to_num(x))) * FPS, 90)) / (float(np.nanstd(x)) + 1e-6)
+        out[name] = {"corr": None if math.isnan(c) else round(c, 3), "size": round(p90(m) / p90(r), 2),
+                     "crisp": round(speed(m) / (speed(r) + 1e-6), 2), "kind": kind}
+    return out
+
+
+def run_sweep(folder, profile, grid, words_from_captions=True):
+    """Score the model, setting by setting, against the real face in a trace folder (needs performance.json).
+    grid: {"articulation": [..], "expressiveness": [..], "coupling": [..]}: each dial is swept alone with the others at 1.0."""
+    sys.path.insert(0, os.path.join(ROOT, "retarget"))
+    import retarget as rt
+    folder = os.path.abspath(folder)
+    trace = json.load(open(os.path.join(folder, "trace.json"), encoding="utf-8"))
+    ref = rt.retarget(folder, hybrid=False)
+    n = int(round(ref["duration"] * FPS))
+    wav = os.path.join(folder, trace["audio"]["file"])
+    words, _ = caption_words(folder, trace["start"], n / FPS) if words_from_captions else ([], 0)
+    results = []
+    for dial, values in grid.items():
+        for v in values:
+            res = sim.simulate_lipsync(wav, profile=profile, words=words or None, **{dial: v})
+            mt = dict(res["tracks"])
+            results.append({"dial": dial, "value": v, "scores": sweep_scores(mt, ref["tracks"], n)})
+    return {"folder": os.path.basename(folder), "profile": profile, "seconds": round(n / FPS, 1), "caption_words": len(words), "results": results}
+
+
+def print_sweep(sw):
+    print(f"\nSettings sweep against the real face in {sw['folder']} ({sw['seconds']} s, profile {sw['profile']}, {sw['caption_words']} caption words)")
+    print("  each cell: corr/size  (corr = shape match; size = model 90th percentile / real face's, 1.0 = same)")
+    for dial in dict.fromkeys(r["dial"] for r in sw["results"]):
+        rows = [r for r in sw["results"] if r["dial"] == dial]
+        names = [k for k in PAIRS if any(k in r["scores"] for r in rows)]
+        print(f"\n  {dial}:  " + "  ".join(f"{k:>11s}" for k in names) + "     mouth-corr  face-corr")
+        for r in rows:
+            cells = []
+            for k in names:
+                sc = r["scores"].get(k)
+                cells.append(f"{sc['corr']:5.2f}/{sc['size']:4.1f}" if sc and sc["corr"] is not None else "     -    ")
+            mc = [sc["corr"] for sc in r["scores"].values() if sc["kind"] == "mouth" and sc["corr"] is not None]
+            fc = [sc["corr"] for sc in r["scores"].values() if sc["kind"] == "face" and sc["corr"] is not None]
+            print(f"  {r['value']:>13.2f}  " + "  ".join(f"{c:>11s}" for c in cells)
+                  + f"       {np.mean(mc) if mc else float('nan'):.3f}      {np.mean(fc) if fc else float('nan'):.3f}")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Measure mouth movement in a video trace and score lipsync_sim against it.")
     ap.add_argument("folder")
@@ -396,7 +488,19 @@ def main():
     ap.add_argument("--save-profile", metavar="NAME", help="also write profiles/NAME.json from these measurements")
     ap.add_argument("--no-captions", action="store_true")
     ap.add_argument("--retrack", action="store_true", help="run face tracking again even if face-30fps.json exists")
+    ap.add_argument("--sweep", action="store_true", help="instead: score articulation, expressiveness and coupling settings against the real face "
+                    "(needs performance.json from analyze/performance.py); writes sweep.json")
+    ap.add_argument("--grid", nargs="*", metavar="DIAL=v1,v2,..", help="values to try with --sweep, e.g. articulation=0,0.5,1,1.5,2 expressiveness=0,0.5,1,1.5,2")
     a = ap.parse_args()
+    if a.sweep:
+        grid = {"articulation": [0.0, 0.5, 1.0, 1.5, 2.0], "expressiveness": [0.0, 0.5, 1.0, 1.5, 2.0], "coupling": [0.0, 1.0, 2.0]}
+        if a.grid:
+            grid = {kv.split("=")[0]: [float(x) for x in kv.split("=")[1].split(",")] for kv in a.grid}
+        sw = run_sweep(a.folder, a.profile, grid, not a.no_captions)
+        print_sweep(sw)
+        with open(os.path.join(os.path.abspath(a.folder), "sweep.json"), "w") as fh:
+            json.dump(sw, fh, indent=1)
+        return
     folder = os.path.abspath(a.folder)
     trace = json.load(open(os.path.join(folder, "trace.json"), encoding="utf-8"))
     if not trace.get("audio"):

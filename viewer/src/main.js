@@ -798,6 +798,37 @@ function fillDemoLines() {
   ls.innerHTML = "";
   c.lines.forEach((l, i) => ls.add(new Option(`${i + 1}. ${l.text.slice(0, 48)}${l.text.length > 48 ? "…" : ""}`, i)));
 }
+// The dials re-run the voice model on this machine's dev server (/api/gen) and swap the result in without stopping playback.
+// A line is live when the server answers; its B animation comes from the voice (and A too, if the line has a trace folder).
+let live = null, liveTimer = 0, liveSeq = 0;
+const dialValues = () => ({ articulation: +$("dialArt").value, expressiveness: +$("dialExp").value, coupling: +$("dialCp").value });
+function setDialLabels() { $("artOut").textContent = (+$("dialArt").value).toFixed(2); $("expOut").textContent = (+$("dialExp").value).toFixed(2); $("cpOut").textContent = (+$("dialCp").value).toFixed(2); }
+async function regenerate() {
+  if (!live) return;
+  const seq = ++liveSeq, d = dialValues(), t = state.t, was = state.playing;
+  $("dialInfo").textContent = "updating…";
+  try {
+    const jobs = [];
+    for (const [slot, job] of Object.entries(live.jobs)) {
+      const q = new URLSearchParams({ ...job, ...d, rig: live.rig });
+      jobs.push(fetch(`/api/gen?${q}`).then(async (r) => { if (!r.ok) throw new Error(await r.text()); return [slot, await r.json()]; }));
+    }
+    const done = await Promise.all(jobs);
+    if (seq !== liveSeq) return;                                    // a newer change is already on its way
+    for (const [slot, json] of done) {
+      await loadAnim(slot, new File([JSON.stringify(json)], `lipscan-live-${slot}.json`));
+      live.settings = json.settings || live.settings;
+    }
+    seek(t);
+    if (was) setPlaying(true);
+    const jp = live.settings && live.settings.jaw_presence;
+    $("dialInfo").textContent = jp ? `jaw presence ${(+jp).toFixed(2)} (from this face's rig)` : "";
+  } catch (e) { $("dialInfo").textContent = String(e.message || e).slice(0, 120); }
+}
+function dialsChanged() { setDialLabels(); clearTimeout(liveTimer); liveTimer = setTimeout(regenerate, 250); }
+for (const id of ["dialArt", "dialExp", "dialCp"]) $(id).oninput = dialsChanged;
+$("dialReset").onclick = () => { for (const id of ["dialArt", "dialExp", "dialCp"]) $(id).value = 1; dialsChanged(); };
+
 let demoBusy = false;
 async function loadDemo() {
   if (demoBusy) return;
@@ -817,6 +848,21 @@ async function loadDemo() {
       const vb = l.video.replace(/\/?$/, "/");
       await loadVideo(JSON.parse(await (await get(vb + "trace.json")).text()), (file) => vb + file.split("/").map(encodeURIComponent).join("/"), c.name);
     } else if (state.video) { state.video = null; $("videoPane").hidden = true; $("nameVideo").textContent = "Video…"; }
+    live = null;
+    $("dials").hidden = true;
+    if (location.protocol !== "file:" && (l.hybrid || l.audio)) {   // the dials need the dev server; probe it once per line
+      const ok = await fetch("/api/gen").then((r) => r.status !== 404, () => false);
+      if (ok) {
+        const base = { profile: demo.profile || "speech" };
+        const jobs = { B: { mode: "voice", wav: l.audio, ...(l.text && !l.noText ? { text: l.text } : {}), ...base } };
+        if (l.hybrid) jobs.A = { mode: "hybrid", folder: l.hybrid, ...base };
+        live = { jobs, rig: c.pack.replace(/\/?$/, "/") + "character.json", settings: null };
+        $("dials").hidden = false;
+        $("dialInfo").textContent = "";
+        for (const id of ["dialArt", "dialExp", "dialCp"]) $(id).value = 1;
+        setDialLabels();
+      }
+    }
     $("moodA").checked = false;
     $("moodB").checked = !l.noMood;
     setMood(!l.noMood && l.mood && moods[l.mood] ? l.mood : "neutral");

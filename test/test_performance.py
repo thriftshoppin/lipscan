@@ -270,5 +270,45 @@ with tempfile.TemporaryDirectory() as tmp:
     check("profiles: speech-kerry (one voice) and speech-cyberpunk (six characters) both load",
           lipsync.load_profile("speech-kerry")["name"] == "speech-kerry" and lipsync.load_profile("speech")["name"] == "speech-cyberpunk")
 
+# ---- 0.3.0: mouth smoothing, sweep scoring, hybrid dials ----
+perf = sys.modules["performance"]
+times = np.arange(0, 6, 1 / 30)
+raw = np.zeros((len(times), len(perf.CHANNELS)))
+ji, bi, hi = perf.CHANNELS.index("jawOpen"), perf.CHANNELS.index("mouthClose"), perf.CHANNELS.index("headYaw")
+raw[:, ji] = 0.3 + 0.2 * np.sin(2 * np.pi * 1.0 * times)
+for f in range(30, len(times) - 10, 30):
+    raw[f:f + 2, bi] = 0.9                                                  # a 2-frame (67 ms) lip closure
+raw[:, hi] = 0.1 * np.sin(2 * np.pi * 8.0 * times)                          # fast jitter on the head
+base = dict(perf.DEFAULTS, neutral=False, fill_gaps_s=0)
+new, _ = perf.clean(times, raw, base)
+old, _ = perf.clean(times, raw, dict(base, mouth_smoothing=False))
+check("mouth smoothing: a 67 ms lip closure keeps more of its peak than with the head's smoothing",
+      new[:, bi].max() > old[:, bi].max() + 0.05, f"{new[:, bi].max():.2f} vs {old[:, bi].max():.2f}")
+check("mouth smoothing: head channels are smoothed exactly as before", np.allclose(new[:, hi], old[:, hi]))
+
+sys.path.insert(0, os.path.join(ROOT, "analyze"))
+import analyze as an  # noqa: E402
+n = 120
+t = np.arange(n) / 30
+ref = {"jaw_mid_open": list(0.3 + 0.3 * np.sin(2 * np.pi * 1.5 * t))}
+same = an.sweep_scores({"jaw_mid_open": list(ref["jaw_mid_open"])}, ref, n)
+shifted = an.sweep_scores({"jaw_mid_open": list(0.3 + 0.3 * np.sin(2 * np.pi * 1.5 * t + 0.2))}, ref, n)
+wrong = an.sweep_scores({"jaw_mid_open": list(0.3 + 0.3 * np.sin(2 * np.pi * 2.3 * t))}, ref, n)
+check("sweep: identical curves score 1.0 with size 1.0", same["jaw"]["corr"] > 0.99 and abs(same["jaw"]["size"] - 1) < 0.05, str(same["jaw"]))
+check("sweep: a small timing offset is forgiven, a different rhythm is not", shifted["jaw"]["corr"] > 0.95 > wrong["jaw"]["corr"], f"{shifted['jaw']['corr']} vs {wrong['jaw']['corr']}")
+check("sweep: tracks missing from the reference are skipped", an.sweep_scores({"jaw_mid_open": ref["jaw_mid_open"]}, {}, n) == {})
+
+tr = {"jaw_mid_open": np.full(60, 0.3), "lips_together_up": np.zeros(60)}
+tr["lips_together_up"][20:24] = 1.0
+cp0 = rt.add_coupling({k: v.copy() for k, v in tr.items()}, 60, 0, 1.0)
+cp1 = rt.add_coupling({k: v.copy() for k, v in tr.items()}, 60, 1.0, 1.0)
+check("hybrid coupling: strength 0 leaves the tracks as they were", set(cp0) == set(tr) and all(np.array_equal(cp0[k], tr[k]) for k in tr))
+check("hybrid coupling: strength 1 adds the cheek, chin and nose tracks", len(cp1) > len(tr))
+nan_tr = {k: v.copy() for k, v in tr.items()}
+for v in nan_tr.values():
+    v[40:] = np.nan
+cpn = rt.add_coupling(nan_tr, 60, 1.0, 1.0)
+check("hybrid coupling: frames with no face stay empty", all(np.isnan(cpn[k][45]) for k in tr))
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

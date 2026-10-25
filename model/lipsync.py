@@ -403,21 +403,21 @@ def place_timed_words(words, db, fps=FPS, voiced_db=-45, longest=1.0):
     return placed
 
 
-def tongue_tracks(placed, n, speaking, cfg, fps=FPS):
+def tongue_tracks(placed, n, speaking, cfg, fps=FPS, art=1.0):
     """The tongue from the placed sounds (TONGUE_BY_VISEME): a steady raised body through speech, shaped by each
     sound, eased in and out, at rest in silence."""
     return learned_tracks(TONGUE_BY_VISEME, lambda k: [f"tongue_mid_{k}"], placed, n, speaking, cfg,
-                          cfg.get("tongue_contrast", 1.5), cfg.get("tongue_attack_ms", 80), cfg.get("tongue_release_ms", 120), fps)
+                          cfg.get("tongue_contrast", 1.5), cfg.get("tongue_attack_ms", 80), cfg.get("tongue_release_ms", 120), fps, art)
 
 
-def lip_tracks(placed, n, speaking, cfg, fps=FPS):
+def lip_tracks(placed, n, speaking, cfg, fps=FPS, art=1.0):
     """Soft lip shapes from the placed sounds (LIPS_BY_VISEME), blending from sound to sound."""
     names = lambda k: [f"lips_l_{k}", f"lips_r_{k}"] if k in SIDED else [f"lips_{k}"]
     return learned_tracks(LIPS_BY_VISEME, names, placed, n, speaking, cfg,
-                          cfg.get("lip_contrast", 2.5), cfg.get("soft_attack_ms", 100), cfg.get("soft_release_ms", 130), fps)
+                          cfg.get("lip_contrast", 2.5), cfg.get("soft_attack_ms", 100), cfg.get("soft_release_ms", 130), fps, art)
 
 
-def learned_tracks(table, track_names, placed, n, speaking, cfg, contrast, attack_ms, release_ms, fps=FPS):
+def learned_tracks(table, track_names, placed, n, speaking, cfg, contrast, attack_ms, release_ms, fps=FPS, art=1.0):
     """Per frame, the table row of the sound placed there ("_voiced" between sounds, rest in silence), pushed away
     from the speech average by `contrast` (averages over imperfectly timed sounds are blurred), then eased."""
     names = sorted({k for t in table.values() for k in t})
@@ -428,19 +428,31 @@ def learned_tracks(table, track_names, placed, n, speaking, cfg, contrast, attac
             at[f] = vis
     lead = round(cfg["shape_lead_ms"] * fps / 1000)
     raw = {k: [0.0] * n for k in names}
+    near = [0.0] * n                                     # 1 on and just around the articulated sounds (p b m f v oo w t d k g)
     for f in range(n):
         src = min(n - 1, f + lead)                       # like the lips, the tongue moves a little ahead of the sound
         if not speaking[src]:
             continue
-        row = table.get(at[src] or "_voiced", table["_voiced"])
+        sound = at[src]
+        row = table.get(sound or "_voiced", table["_voiced"])
+        c = contrast * art if sound in ART_CLASSES else contrast   # articulation sharpens or softens these sounds' shapes
+        if sound in ART_CLASSES:
+            for g in range(max(0, f - 2), min(n, f + 3)):
+                near[g] = 1.0
         for k in names:
             v = row.get(k, 0.0)
-            raw[k][f] = max(0.0, min(1.0, centre[k] + contrast * (v - centre[k])))
+            raw[k][f] = max(0.0, min(1.0, centre[k] + c * (v - centre[k])))
     slow = dict(cfg, attack_ms=attack_ms, release_ms=release_ms, max_open_speed=99, max_close_speed=99)
+    ts = time_scale(art)
+    fast = dict(slow, attack_ms=attack_ms / ts, release_ms=release_ms / ts)       # around the articulated sounds only
+    mix = gentle(near, 1.0) if art != 1.0 else None
     out = {}
     for k, v in raw.items():
         if max(v) > 0.01:
             sm = smooth(v, slow, fps)
+            if mix is not None:
+                sf = smooth(v, fast, fps)
+                sm = [w * x + (1 - w) * y for w, x, y in zip(mix, sf, sm)]
             for name in track_names(k):
                 out[name] = sm
     return out
@@ -470,22 +482,58 @@ CRISP = ("eye_l_blink", "eye_r_blink", "lips_together_up", "lips_together_dn")
 
 
 CLOSURE = ("lips_together_up", "lips_together_dn")
+
+# ARTICULATION: one dial for how crisp consonant mouth shapes are. 1.0 is the model as measured. Below 1.0 the shapes
+# get smaller, slower and longer (mumbled); above 1.0 larger, faster and shorter (crisp). It acts on the sounds listed
+# here: the p/b/m closure, the f/v tuck, oo/w pursing and the plosive tongue shapes (t d n, k g), both their size
+# and how fast they come and go. Range 0.0 to 2.0.
+ART_CLASSES = {"BMP", "FV", "OO", "W", "TD", "K"}
+PARAM_RANGE = (0.0, 2.0)
+
+
+def clamp_param(x, default=1.0):
+    """A dial value (articulation, expressiveness) held to 0.0-2.0; None or junk gives the default."""
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return default
+    if x != x:                                             # NaN
+        return default
+    return max(PARAM_RANGE[0], min(PARAM_RANGE[1], x))
+
+
+def time_scale(art):
+    """How much faster shapes move at this articulation (0.25 at the floor, so 0.0 is slow, not frozen)."""
+    return max(art, 0.25)
+
+
+def sharpen(values, art, sigma=2.0):
+    """Unsharp mask in time: art > 1 pushes peaks up and valleys down (crisper), art < 1 blurs them. Identity at 1.0."""
+    if art == 1.0:
+        return list(values)
+    blur = gentle(values, sigma)
+    return [max(0.0, min(1.0, v + (art - 1.0) * (v - b))) for v, b in zip(values, blur)]
 SHARP_LIPS = ("lips_suck_dn",)   # with lip_mode "learned", these still come from VISEMES (crisp f/v)
 LIP_FORWARD_MAX = 0.6   # purse + funnel together; the game's largest is 0.62 (99th percentile 0.42)
 
 
-def diction_tracks(placed, n, cfg, fps=FPS, quiet=None):
+def diction_tracks(placed, n, cfg, fps=FPS, quiet=None, art=1.0):
     """Each shape ramps in, holds, ramps out, a little ahead of the sound. A p/b/m closure is a short peak, capped
     at the profile's closure_peak, and other lip shapes give way under it. quiet[f] = True in pauses: no shape whose sound
     falls in a pause."""
     tracks, jaw_scale = {}, [1.0] * n
     lead = round(cfg["shape_lead_ms"] * fps / 1000)
+    ts = time_scale(art)
+    art_tracks = {name for v in ART_CLASSES for name in VISEMES[v]}      # tracks the articulated sounds drive
     for vis, start, end in placed:
         shape = VISEMES[vis]
         if vis == "BMP" and end - start > 1:                  # a press is a peak, not a plateau
             mid = (start + end + 1) // 2
             start, end = mid - 1, mid
-        short = MIN_HOLD.get(vis, 3) - (end - start + 1)     # too brief to read on screen: widen around its centre
+        hold = MIN_HOLD.get(vis, 3)
+        if art != 1.0 and vis in ART_CLASSES:                 # crisper = shorter, mumbled = longer
+            hold = max(2, round(hold / ts))
+        short = hold - (end - start + 1)                     # too brief to read on screen: widen around its centre
         if short > 0:
             start, end = start - short // 2, end + short - short // 2
         for f in range(max(0, start - lead), min(n, end + 1 - lead)):
@@ -494,17 +542,21 @@ def diction_tracks(placed, n, cfg, fps=FPS, quiet=None):
                     jaw_scale[f] = min(jaw_scale[f], value) if value < 1 else max(jaw_scale[f], value)
                 else:
                     t = tracks.setdefault(name, [0.0] * n)
-                    t[f] = max(t[f], value * cfg["viseme_strength"])
+                    v = value * cfg["viseme_strength"]
+                    if art != 1.0 and vis in ART_CLASSES:     # size follows articulation (full size is 1.0)
+                        v = min(1.0, v * art)
+                    t[f] = max(t[f], v)
     if quiet:
         for t in tracks.values():
             for f in range(n):
                 if quiet[min(n - 1, f + lead)]:          # the shape runs `lead` frames ahead of its sound
                     t[f] = 0.0
-    quick = dict(cfg, attack_ms=cfg["shape_attack_ms"], release_ms=cfg["shape_release_ms"], max_open_speed=99, max_close_speed=99)
+    quick = dict(cfg, attack_ms=cfg["shape_attack_ms"] / ts, release_ms=cfg["shape_release_ms"] / ts, max_open_speed=99, max_close_speed=99)
     # p/b/m presses (and the jaw scale) are sharp in the game; the other lip and tongue shapes ease in and out more slowly
     soft = dict(cfg, attack_ms=cfg.get("soft_attack_ms", cfg["shape_attack_ms"]), release_ms=cfg.get("soft_release_ms", cfg["shape_release_ms"]),
                 max_open_speed=99, max_close_speed=99)
-    out = {k: smooth(v, quick if k in CLOSURE else soft, fps) for k, v in tracks.items()}
+    soft_art = dict(soft, attack_ms=soft["attack_ms"] / ts, release_ms=soft["release_ms"] / ts)   # the articulated shapes' own speed
+    out = {k: smooth(v, quick if k in CLOSURE else (soft_art if k in art_tracks else soft), fps) for k, v in tracks.items()}
     # neighbouring shapes overlap after smoothing: keep purse + funnel within what the game ever uses
     for side in "lr":
         p_, f_ = out.get(f"lips_{side}_purse"), out.get(f"lips_{side}_funnel")
@@ -514,6 +566,8 @@ def diction_tracks(placed, n, cfg, fps=FPS, quiet=None):
                 if tot > LIP_FORWARD_MAX:
                     p_[k], f_[k] = p_[k] * LIP_FORWARD_MAX / tot, f_[k] * LIP_FORWARD_MAX / tot
     cap = cfg.get("closure_peak", 1.0)
+    if art != 1.0:
+        cap = min(1.0, cap * art)                          # the press itself gets smaller or, up to full closure, larger
     if any(k in out for k in CLOSURE):
         press = [max(out.get(k, [0.0] * n)[f] for k in CLOSURE) for f in range(n)]
         for k in CLOSURE:
@@ -585,8 +639,57 @@ def gesture(n, centre, attack, hold, release, peak):
     return out
 
 
-def upper_face(db, samples, rate, cfg, seed, fps=FPS):
-    """Tracks and head angles for the upper face, from the voice alone. Settings: the profile's "upper_face"."""
+def squash(x, expr):
+    """The ceiling for an expression track. At expressiveness 1.0 and below it is the plain clip at 1.0 (the model as measured);
+    above 1.0 the strongest values bend toward 1.0 instead of flattening against it, so turning the dial up keeps the shape."""
+    if expr <= 1.0 or x <= 0.7:
+        return min(1.0, x)
+    return 0.7 + 0.3 * math.tanh((x - 0.7) / 0.3)
+
+
+def prosody(db, samples, rate, n, voiced, loud, peaks, fps=FPS):
+    """What the voice's tone is doing, per frame, each 0 to 1 unless noted:
+      rise   pitch rising (about +8 semitones per second is 1): questions, lifts, emphasis
+      tense  loud, fast, high delivery (stress, effort, anger)
+      calm   low energy over about a second (slack, quiet, relaxed stretches)
+      pitch  the pitch track itself (semitones, None where unvoiced)
+    from energy (loudness), pitch and its movement, and speaking rate (loudness peaks per second against this voice's own)."""
+    pitch = pitch_track(samples, rate, n, fps)
+    heard = [p for p in pitch if p is not None]
+    # fill unvoiced gaps shorter than 0.25 s so the slope is continuous through consonants
+    fill, last, since = list(pitch), None, 0
+    for f in range(n):
+        if pitch[f] is not None:
+            if last is not None and 0 < f - last <= round(0.25 * fps):
+                for g in range(last + 1, f):
+                    fill[g] = pitch[last] + (pitch[f] - pitch[last]) * (g - last) / (f - last)
+            last = f
+    k = max(2, round(0.13 * fps))
+    rise = [0.0] * n
+    for f in range(n):
+        a, b = fill[max(0, f - k)], fill[min(n - 1, f + k)]
+        if a is not None and b is not None and fill[f] is not None:
+            rise[f] = max(0.0, min(1.0, ((b - a) / ((min(n - 1, f + k) - max(0, f - k)) / fps)) / 8.0))
+    win = round(1.0 * fps)
+    rates = []
+    for f in range(n):
+        rates.append(sum(1 for q in peaks if f - win <= q <= f + win) / 2.0)
+    vr = sorted(r for r, v in zip(rates, voiced) if v)
+    med = vr[len(vr) // 2] if vr else 0.0
+    tempo = [(r / med if med > 0 else 1.0) for r in rates]                   # 1 = this voice's usual pace
+    centre = sorted(heard)[len(heard) // 2] if heard else 0.0
+    high = [0.0 if (p is None) else max(0.0, min(1.0, (p - centre) / 6.0)) for p in pitch]
+    tense = [loud[f] * (0.5 + 0.5 * max(0.0, min(1.0, tempo[f] - 0.8))) * (0.7 + 0.3 * high[f]) if voiced[f] else 0.0 for f in range(n)]
+    energy = gentle(loud, 0.5 * fps)
+    calm = [max(0.0, min(1.0, 1.0 - 2.0 * e)) for e in energy]
+    return {"rise": rise, "tense": tense, "calm": calm, "tempo": tempo, "pitch": pitch}
+
+
+def upper_face(db, samples, rate, cfg, seed, fps=FPS, expr=1.0):
+    """Tracks and head angles for the upper face, from the voice alone. Settings: the profile's "upper_face".
+    expr (expressiveness): scales how strongly the face follows the voice's tone: brow raises, frowns, squints, cheek and
+    nose engagement and head movement, in size and number. 1.0 is as measured; 0.0 leaves the upper face still.
+    The profile's prosody_* weights (0 turns each off) tie the face to the voice's pitch rise, tension and calm."""
     u = cfg["upper_face"]
     n = len(db)
     rnd = random.Random(seed)
@@ -594,11 +697,21 @@ def upper_face(db, samples, rate, cfg, seed, fps=FPS):
     voiced_db = cfg["normalize_to_db"] - 30
     voiced = [d > voiced_db for d in db]
     loud = [max(0.0, min(1.0, (d - voiced_db) / 30)) for d in db]          # 0 at the voicing floor, 1 at the loud end
-    pitch = pitch_track(samples, rate, n, fps) if u.get("pitch_weight") else [None] * n
+    w_rise, w_tense, w_calm = u.get("prosody_raise", 0.0), u.get("prosody_tense", 0.0), u.get("prosody_calm", 0.0)
+    w_cheek, w_nose = u.get("prosody_cheek", 0.0), u.get("prosody_nose", 0.0)
+    pro = None
+    if w_rise or w_tense or w_calm or w_cheek or w_nose:
+        peaks0, _ = loudness_peaks(db, voiced_db)
+        pro = prosody(db, samples, rate, n, voiced, loud, peaks0, fps)
+    pitch = pro["pitch"] if pro else (pitch_track(samples, rate, n, fps) if u.get("pitch_weight") else [None] * n)
     heard = sorted(p for p in pitch if p is not None)
     centre = heard[len(heard) // 2] if heard else 0.0
     prel = [0.0 if p is None else max(-1.0, min(1.0, (p - centre) / 6)) for p in pitch]   # +-6 semitones -> +-1
     emph = [(loud[f] + u.get("pitch_weight", 0) * prel[f]) if voiced[f] else 0.0 for f in range(n)]
+    if pro and w_rise:                                   # rising pitch lifts the brows (a question, a lift, a stressed rise)
+        emph = [e + w_rise * r if voiced[f] else e for f, (e, r) in enumerate(zip(emph, pro["rise"]))]
+    relax = [1.0 - w_calm * c for c in pro["calm"]] if (pro and w_calm) else None        # calm stretches relax the face
+    raise_peak = u["brow_raise_peak"] * expr
 
     tracks = {}
     head = {"pitch": [0.0] * n, "yaw": [0.0] * n, "roll": [0.0] * n}
@@ -606,7 +719,7 @@ def upper_face(db, samples, rate, cfg, seed, fps=FPS):
     # Brow raises: on the strongest syllables, a short raise-and-relax gesture
     peaks, _ = loudness_peaks(db, voiced_db)
     ranked = sorted(peaks, key=lambda f: -emph[f])
-    want = max(1 if ranked else 0, round(u["brow_raises_per_minute"] * n / fps / 60))
+    want = max(1 if ranked else 0, round(u["brow_raises_per_minute"] * expr * n / fps / 60)) if expr > 0 else 0
     events = []
     for f in ranked:
         if len(events) >= want or emph[f] < u["brow_raise_threshold"]:
@@ -621,7 +734,7 @@ def upper_face(db, samples, rate, cfg, seed, fps=FPS):
         while f + hold < end and loud[f + hold] > 0.6 * loud[f]:
             hold += 1
         g = gesture(n, f - ms(u["brow_lead_ms"]), ms(u["brow_attack_ms"]), hold, ms(u["brow_release_ms"]),
-                    u["brow_raise_peak"] * (0.6 + 0.4 * emph[f] / top))
+                    raise_peak * (0.6 + 0.4 * emph[f] / top) * (relax[f] if relax else 1.0))
         for k, v in g.items():
             raise_[k] = max(raise_[k], v)
     if any(raise_):
@@ -639,12 +752,23 @@ def upper_face(db, samples, rate, cfg, seed, fps=FPS):
         else:
             drive = [loud[min(n - 1, f + lead)] * (1.0 if prel[min(n - 1, f + lead)] <= 0 else 0.4) for f in range(n)]
         slow = dict(cfg, attack_ms=u["frown_attack_ms"], release_ms=u["frown_release_ms"], max_open_speed=99, max_close_speed=99)
+        if pro and w_tense:                              # loud, fast, tense stretches frown and squint further
+            drive = [d + w_tense * t for d, t in zip(drive, pro["tense"])]
         frown = smooth(drive, slow, fps)
-        base = u.get("frown_base", 0.0)
-        frown = [min(1.0, base + u["frown_level"] * v) * (1 - min(1.0, r / max(1e-6, u["brow_raise_peak"]))) for v, r in zip(frown, raise_)]
+        base = u.get("frown_base", 0.0) * min(expr, 1.0)         # more expressive = bigger swings, not a higher resting scowl
+        frown = [squash(base + u["frown_level"] * expr * v, expr) * (1 - min(1.0, r / max(1e-6, raise_peak))) for v, r in zip(frown, raise_)]
+        if relax:
+            frown = [x * r for x, r in zip(frown, relax)]
         for side in "lr":
             for name in ("brows_lower", "brows_lateral", "oculi_squint_inner", "oculi_squint_outer_upper", "oculi_squint_outer_lower"):
                 tracks[f"eye_{side}_{name}"] = frown
+    if pro and (w_cheek or w_nose):                      # cheeks lift and the nose wrinkles with tense delivery
+        tn = smooth(pro["tense"], dict(cfg, attack_ms=120, release_ms=300, max_open_speed=99, max_close_speed=99), fps)
+        for side in "lr":
+            if w_cheek:
+                tracks[f"lips_{side}_nasolabialDeepener"] = [min(1.0, w_cheek * expr * t) for t in tn]
+            if w_nose:
+                tracks[f"nose_{side}_snear"] = [min(1.0, w_nose * expr * t) for t in tn]
 
     # Effort (singing, shouting): squint and cheek raise on loud passages
     if u.get("loud_squint") or u.get("loud_cheek"):
@@ -653,9 +777,9 @@ def upper_face(db, samples, rate, cfg, seed, fps=FPS):
         for side in "lr":
             if u.get("loud_squint"):
                 t = tracks.get(f"eye_{side}_oculi_squint_outer_lower", [0.0] * n)
-                tracks[f"eye_{side}_oculi_squint_outer_lower"] = [min(1.0, a + u["loud_squint"] * e) for a, e in zip(t, effort)]
+                tracks[f"eye_{side}_oculi_squint_outer_lower"] = [squash(a + u["loud_squint"] * expr * e, expr) for a, e in zip(t, effort)]
             if u.get("loud_cheek"):
-                tracks[f"lips_{side}_nasolabialDeepener"] = [u["loud_cheek"] * e for e in effort]
+                tracks[f"lips_{side}_nasolabialDeepener"] = [u["loud_cheek"] * expr * e for e in effort]
 
     # Blinks: like the game, in the middle of each pause between phrases; during long stretches of speech without
     # a pause, extra blinks at about blinks_per_minute, on weak syllables
@@ -702,20 +826,21 @@ def upper_face(db, samples, rate, cfg, seed, fps=FPS):
         tracks["eye_l_dir_dn"] = tracks["eye_r_dir_dn"] = [u["gaze_down"]] * n
 
     # Head: a small nod (chin dips, then returns) on stressed syllables, and a slow sway
-    if u.get("head_nod_deg") and peaks:
-        nods = sorted(peaks, key=lambda f: -emph[f])[:max(1, round(u["head_nods_per_minute"] * n / fps / 60))]
+    if u.get("head_nod_deg") and peaks and expr > 0:
+        nods = sorted(peaks, key=lambda f: -emph[f])[:max(1, round(u["head_nods_per_minute"] * expr * n / fps / 60))]
         for f in nods:
             if emph[f] < u["brow_raise_threshold"]:
                 continue
-            for k, v in gesture(n, f, ms(90), 0, ms(320), u["head_nod_deg"] * min(1.0, emph[f])).items():
+            for k, v in gesture(n, f, ms(90), 0, ms(320), u["head_nod_deg"] * expr * min(1.0, emph[f])).items():
                 head["pitch"][k] = min(head["pitch"][k], -v)
     if u.get("head_sway_deg"):
         a1, a2, a3 = (rnd.uniform(0, 6.3) for _ in range(3))
         for f in range(n):
             t = f / fps
-            head["yaw"][f] += u["head_sway_deg"] * math.sin(0.37 * t * 6.283 + a1)
-            head["roll"][f] += 0.5 * u["head_sway_deg"] * math.sin(0.23 * t * 6.283 + a2)
-            head["pitch"][f] += 0.4 * u["head_sway_deg"] * math.sin(0.29 * t * 6.283 + a3)
+            sway = u["head_sway_deg"] * expr * (relax[f] if relax else 1.0)
+            head["yaw"][f] += sway * math.sin(0.37 * t * 6.283 + a1)
+            head["roll"][f] += 0.5 * sway * math.sin(0.23 * t * 6.283 + a2)
+            head["pitch"][f] += 0.4 * sway * math.sin(0.29 * t * 6.283 + a3)
     head = {k: v for k, v in head.items() if any(abs(x) > 1e-6 for x in v)}
     return tracks, head
 
@@ -809,14 +934,25 @@ def apply_mood(tracks, preset, n, blink_peak=0.85):
 # ----------------------------------------------------------------------------
 # Main entry point
 # ----------------------------------------------------------------------------
-def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, mood=None, speaker_pitch=None):
+def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, mood=None, speaker_pitch=None,
+                     articulation=None, expressiveness=None, coupling=None, jaw_presence=None):
     """Returns {"fps", "profile", "duration", "tracks": {name: [value per frame]}}.
     profile: a name, alias ("speech", "singing"), path, or an already loaded profile dict.
     words: optional [(start seconds, word), ...]; used instead of text when given.
     mood: None, a preset name (neutral, calm, scowl, warm, sad, surprised), a preset path or dict, or "auto" (a guess
     from the voice). speaker_pitch: the speaker's typical pitch (voice_pitch() of another line of theirs), so --mood
-    auto can use pitch relative to that voice."""
+    auto can use pitch relative to that voice.
+    articulation: how crisp consonant mouth shapes are (0.0 mumbled, 1.0 as measured, 2.0 very crisp); None = the
+    profile's "articulation", else 1.0. expressiveness: how strongly the face follows the tone of the voice (0.0 flat,
+    1.0 as measured, 2.0 animated); None = the profile's "expressiveness", else 1.0. Both are held to 0.0-2.0.
+    coupling: how strongly the cheeks, lip puff, nose, chin, upper lip and neck follow the mouth and jaw (0.0 off, 1.0 as
+    measured, 2.0 doubled); None = the profile's "coupling", else 1.0. jaw_presence: how much this face's jaw shows
+    (coupling.jaw_presence() from the rig; 1.0 average, held to 0.7-1.3); None = the profile's "jaw_presence", else 1.0."""
     cfg = profile if isinstance(profile, dict) else load_profile(profile)
+    art = clamp_param(articulation if articulation is not None else cfg.get("articulation", 1.0))
+    expr = clamp_param(expressiveness if expressiveness is not None else cfg.get("expressiveness", 1.0))
+    coup = clamp_param(coupling if coupling is not None else cfg.get("coupling", 1.0))
+    presence = max(0.7, min(1.3, clamp_param(jaw_presence if jaw_presence is not None else cfg.get("jaw_presence", 1.0), 1.0)))
     samples, rate = load_wav(wav_path)
     db = normalize(loudness_db(samples, rate), cfg["normalize_to_db"])
     n = len(db)
@@ -827,14 +963,14 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
         # a pause: more than 2 frames from any sound
         loud = [d > cfg["normalize_to_db"] - 30 for d in db]
         quiet = [not any(loud[max(0, f - 2):f + 3]) for f in range(n)]
-        tracks, jaw_scale = diction_tracks(placed, n, cfg, quiet=quiet)
+        tracks, jaw_scale = diction_tracks(placed, n, cfg, quiet=quiet, art=art)
         jaw = [min(1.0, j * s) for j, s in zip(jaw, jaw_scale)]
-        tracks.update(tongue_tracks(placed, n, loud, cfg))
+        tracks.update(tongue_tracks(placed, n, loud, cfg, art=art))
         if cfg.get("lip_mode") == "learned":              # soft, blended lips; p/b/m presses stay sharp
             sharp = {k: tracks[k] for k in SHARP_LIPS if k in tracks}   # f/v tuck stays a crisp shape too
             for k in [k for k in tracks if k.startswith("lips_") and k not in CLOSURE]:
                 del tracks[k]
-            soft = lip_tracks(placed, n, loud, cfg)
+            soft = lip_tracks(placed, n, loud, cfg, art=art)
             for k, v in sharp.items():
                 soft[k] = [max(x, y) for x, y in zip(soft.get(k, [0.0] * n), v)]
             press = [max(tracks.get(k, [0.0] * n)[f] for k in CLOSURE) for f in range(n)]
@@ -853,9 +989,9 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
         if learned:
             # regression shrinks peaks toward the average (about half the game's size); these gains restore presence
             lg, tg = cfg.get("audio_lips_gain", 1.7), cfg.get("audio_tongue_gain", 1.4)
-            tracks.update({k: [min(1.0, x * (tg if k.startswith("tongue_") else lg)) for x in v] for k, v in learned.items()})
+            tracks.update({k: [min(1.0, x * (tg if k.startswith("tongue_") else lg)) for x in sharpen(v, art)] for k, v in learned.items()})
         else:                                            # the tongue's resting speech posture only
-            tracks.update(tongue_tracks([], n, loud, cfg))
+            tracks.update(tongue_tracks([], n, loud, cfg, art=art))
     tracks["jaw_mid_open"] = jaw
     for name, gain in cfg["follow_jaw"].items():
         base = tracks.get(name, [0.0] * n)
@@ -864,9 +1000,13 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
         for name in list(tracks):
             if name.startswith("lips_r_"):
                 tracks[name] = [v * (0.9 + 0.1 * math.sin(f / FPS * 0.7)) for f, v in enumerate(tracks[name])]
+    if coup > 0:                                         # cheeks, lip puff, nose, chin, upper lip and neck follow the mouth and jaw
+        sys.path.insert(0, HERE)
+        import coupling as _coupling
+        _coupling.couple(tracks, n, coup, presence)
     head = {}
     if cfg.get("upper_face"):
-        upper, head = upper_face(db, samples, rate, cfg, seed)
+        upper, head = upper_face(db, samples, rate, cfg, seed, expr=expr)
         for name, v in upper.items():
             tracks[name] = [max(a, b) for a, b in zip(tracks.get(name, [0.0] * n), v)]
     elif cfg.get("blinks_per_minute"):                   # profiles from before 0.2.0: blinks only
@@ -905,6 +1045,7 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
         head_sigma = cfg.get("head_smooth_ms", 120) * FPS / 1000
         head = {k: gentle(v, head_sigma) for k, v in head.items()}
     out = {"fps": FPS, "profile": cfg.get("name", "custom"), "duration": n / FPS,
+           "settings": {"articulation": art, "expressiveness": expr, "coupling": coup, "jaw_presence": round(presence, 3)},
            "tracks": {k: [round(v, 4) for v in vals] for k, vals in sorted(tracks.items())}}
     if head:
         out["head"] = {k: [round(v, 2) for v in vals] for k, vals in head.items()}
@@ -933,16 +1074,33 @@ if __name__ == "__main__":
     ap.add_argument("--profile", default="speech", help=f"one of {', '.join(profile_names())}, speech, singing, or a .json path")
     ap.add_argument("--mood", help=f"held expression: {', '.join(mood_names())}, a preset .json, or auto (a guess from the voice)")
     ap.add_argument("--voice-ref", help="another recording of the same speaker: lets --mood auto judge pitch against their own voice")
+    ap.add_argument("--articulation", type=float, help="how crisp consonant mouth shapes are: 0.0 mumbled, 1.0 as measured "
+                    "(default; or the profile's own), 2.0 very crisp. Held to 0.0-2.0")
+    ap.add_argument("--expressiveness", type=float, help="how strongly the face follows the tone of the voice: 0.0 flat, 1.0 as "
+                    "measured (default; or the profile's own), 2.0 animated. Held to 0.0-2.0")
+    ap.add_argument("--coupling", type=float, help="how strongly the cheeks, lip puff, nose, chin, upper lip and neck follow the mouth "
+                    "and jaw: 0.0 off, 1.0 as measured (default; or the profile's own), 2.0 doubled. Held to 0.0-2.0")
+    ap.add_argument("--jaw-presence", type=float, help="how much this face's jaw shows, from the rig (the viewer's pack gives it): "
+                    "1.0 average, up to 1.3 for a wide, long jaw. Scales the coupling")
+    ap.add_argument("--rig", help="a character.json: sets --jaw-presence from that face's jaw (unless given)")
     ap.add_argument("--export", choices=sorted(EXPORTERS), default="raw", help="track naming (default: raw rig names)")
-    ap.add_argument("--out", help="write JSON here")
+    ap.add_argument("--out", help="write JSON here ('-' writes it to the terminal and prints nothing else)")
     ap.add_argument("--preview", action="store_true", help="print a bar chart")
     a = ap.parse_args()
+    if a.rig and a.jaw_presence is None:
+        import coupling as _coupling
+        a.jaw_presence = _coupling.rig_presence(a.rig)
     words = None
     if a.words:
         with open(a.words, encoding="utf-8") as fh:
             words = [(float(t), str(w)) for t, w in json.load(fh)]
     res = simulate_lipsync(a.wav, a.text, a.profile, words=words, mood=a.mood,
-                           speaker_pitch=voice_pitch(a.voice_ref) if a.voice_ref else None)
+                           speaker_pitch=voice_pitch(a.voice_ref) if a.voice_ref else None,
+                           articulation=a.articulation, expressiveness=a.expressiveness, coupling=a.coupling,
+                           jaw_presence=a.jaw_presence)
+    if a.out == "-":
+        json.dump(EXPORTERS[a.export](res), sys.stdout)
+        sys.exit(0)
     if a.preview or not a.out:
         preview(res)
     res = EXPORTERS[a.export](res)

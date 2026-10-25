@@ -26,6 +26,21 @@ A profile is a JSON file in `profiles/` that tells the model how a mouth moves. 
 | `neck_during_speech` | Neck and throat tracks, and the level each is held at while someone talks. |
 | `mood_auto` | Settings for `--mood auto` (a guess): reference pitch, loudness and pitch range, the threshold, and which preset counts as `intense` and which as `calm`. |
 | `upper_face` | The voice-driven upper face (below). Leave it out for mouth only. |
+| `articulation` | 0.0-2.0, default 1.0. How crisp the sharp consonants are (see docs/MEASUREMENTS.md). The command line's `--articulation` overrides it. `speech-crisp` sets 1.5. |
+| `expressiveness` | 0.0-2.0, default 1.0. How much the upper face moves. `--expressiveness` overrides it. |
+| `coupling`, `jaw_presence` | 0.0-2.0 (default 1.0) and 0.7-1.3 (default 1.0): the cheek, nose and chin that follow the mouth, and how much this face's jaw shows. `--coupling`, `--jaw-presence` and `--rig` override them. |
+
+### Shipped variants
+
+| Profile | What differs |
+|---|---|
+| `speech-cyberpunk` (`speech`) | The default. |
+| `speech-crisp` | `articulation` 1.5. |
+| `speech-expressive` | The face follows the voice's tone (`prosody_raise` 0.3, `prosody_tense` 0.15, `prosody_calm` 0.6, `prosody_cheek` 0.2, `prosody_nose` 0.1). |
+| `singing-kerry` (`singing`) | The default for song. |
+| `singing-expressive` | `prosody_raise` 0.3. |
+
+The best settings measured against real faces are in docs/MEASUREMENTS.md. Per-voice defaults go in a profile of your own (`--save-profile`, then add the keys by hand).
 
 ### Moods
 
@@ -68,6 +83,7 @@ Since 0.2.0, the model also animates the upper face from the voice alone. These 
 | `loud_squint`, `loud_cheek` | An extra squint and cheek raise on loud passages (effort). |
 | `gaze_down` | The eyes rest this far down (`eye_*_dir_dn`, where 1.0 = 30°). |
 | `head_nod_deg`, `head_nods_per_minute`, `head_sway_deg` | Head motion in degrees: a small chin dip on stressed syllables, and a slow sway. Written to the result's `head`. |
+| `prosody_raise`, `prosody_tense`, `prosody_calm`, `prosody_cheek`, `prosody_nose` | Weights (0 = off, the default in every profile but the two `-expressive` ones): rising pitch lifts the brows, loud fast high delivery frowns and squints further, calm stretches relax the face, tense delivery lifts the cheeks and wrinkles the nose. Measured against the game's faces: rise helped singing and hurt speech, tense and calm changed nothing. The cheek and nose weights are authored, not measured. |
 
 Profiles from 0.1.0 with only a top-level `blinks_per_minute` still work. They give the mouth plus blinks, as before.
 

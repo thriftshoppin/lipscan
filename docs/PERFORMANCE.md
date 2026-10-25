@@ -102,6 +102,10 @@ One limit: if a video was **mirrored** by whoever made it (common with selfie ca
 
 The output is `retarget-cyberpunk.json`: `{"fps": 30, "tracks": {...}, "head": {"yaw", "pitch", "roll"}, "video": {"start", "trace"}}`. Frame 0 is the trace's start, so the trace's `audio.wav` lines up. Frames with no face are `null`.
 
+## Mouth smoothing
+
+Mouth shapes (`jawOpen`, `mouth*`, plus `lipGap` and `mouthWidth`, which are measured from the landmarks) get their own one-euro filter, a 3 Hz base and beta 2, where the head, brows and gaze keep 1.5 Hz and beta 0.5 (blinks keep their own faster one). A lip closure is over in two or three frames; the slower filter cut it to about two thirds of its height. Settings: `one_euro.mouth_min_cutoff_hz`, `one_euro.mouth_beta`; `--mouth-cutoff` and `--mouth-beta` change them, and `--legacy-mouth` goes back to the single filter. `--refine` adds an enlarged-crop second look at the locked face; it is off, because it lowered the match on the test clip. Numbers: docs/MEASUREMENTS.md.
+
 ## Mouth: hybrid or video-only
 
 A face that is small in the frame, turned away or low resolution gives a weak mouth reading. On a 640 px talking-head clip, the tracked jaw was about 2.3 times too small and matched the voice at 0.31–0.42. The voice model matched at 0.95. So `retarget.py` is a **hybrid** by default:
@@ -111,6 +115,8 @@ A face that is small in the frame, turned away or low resolution gives a weak mo
 | jaw, p/b/m closures and lip shapes (with caption words), tongue, neck | head, brows, blinks, gaze, cheeks, nose, smiles and frowns |
 
 The jaw also takes the video where the mouth is clearly wider than the voice suggests. `--video-only` reads everything from the video instead; use it for a large, well-lit, face-on shot. Turn captions on before recording (press `c`) so the voice side has words.
+
+The hybrid takes the same dials as the voice model: `--articulation`, `--expressiveness` (the voice side's), `--coupling` and `--jaw-presence` (or `--rig character.json`), and `--profile` for the voice side. The coupling is added after the merge, so the cheeks, nose and chin follow whichever mouth the tracks ended up with; frames with no face stay empty. `--out -` writes the result to the terminal.
 
 ## In the viewer
 

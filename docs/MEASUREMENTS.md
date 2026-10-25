@@ -257,6 +257,52 @@ The regression shrinks peaks to about half the game's, so lips are scaled up ×1
 
 **Mouth size from video.** A hybrid retarget scales the voice's jaw and lip movement by how far the video shows the mouth opening, over a 0.6 s window and relative to that clip's own 95th percentile. On a mumbling talking-head clip this raised the jaw's match with his real mouth from 0.46 to 0.79, and the mumbled moments now keep the lips nearly shut while his wide-open moments open.
 
+## Articulation, tone, coupling and the mouth reading (0.3.0)
+
+All scored the way the rest of this file is: six game characters (140-142 lines), each held out of its own fit, against the game's JALI lipsync layer. Reference numbers from before (jaw 0.79 speech / 0.76 singing, p/b/m 75%, f/v 77%, oo/w 61%) are unchanged at the defaults: `test/golden.py` pins the default output of seven cases byte for byte.
+
+**Articulation.** Speech, 246 game p/b/m presses. "Width" is how long the press stays above half its peak; "hit" is the share of the game's events the model has within a frame.
+
+| Articulation | p/b/m press width | peak | hit / false | f/v hit | oo/w purse | jaw match |
+|---|---|---|---|---|---|---|
+| 0.5 | 300 ms | 0.47 | 0.42 / 0.25 | 0.01 | none | 0.789 |
+| **1.0 (default)** | **133 ms** | 0.95 | 0.55 / 0.20 | 0.47 | none | 0.789 |
+| 1.5 | 100 ms | 1.00 | 0.56 / 0.21 | 0.53 | rare | 0.789 |
+| 2.0 | 67 ms | 1.00 | 0.53 / 0.21 | 0.53 | 0.38 / 0.78 | 0.789 |
+
+The game's press is about 133 ms wide, which is what the default gives, so for game voices the default is the best-measured value. Up to 1.5 the hits rise slightly (p/b/m 0.55 to 0.56, f/v 0.47 to 0.53); at 2.0 the purse starts to fire often and falsely. Higher values are a style choice (a clipped or deliberate voice), not a better match, which is why `speech-crisp` says so. The jaw is untouched at every value. Singing has no game reference for these shapes, so no value is recommended for it.
+
+**Tone (prosody).** Frown / squint / raise correlation against the game, speech: off 0.230 / 0.234 / 0.232; pitch rise .3 0.185 / 0.188 / 0.189 (worse); tense .3 0.233 / 0.237 / 0.232 and calm .6 0.230 / 0.234 / 0.232 (no change). Singing (concert capture): rise .3 frown 0.32 to 0.35, squint 0.30 to 0.31, raise 0.06 to 0.03. So in the game's data tone does not predict the face in speech, and in singing it helps a little. The prosody terms ship off; the `-expressive` profiles turn them on. Above expressiveness 1.0 the frown now holds its shape (singing: correlation 0.26 at 1.5 and 0.25 at 2.0; at 1.5 it had fallen to 0.15 before the base was held down and the top bent).
+
+**Coupling.** The game's cheek, lip puff, nose, chin and lip-suck tracks follow the lips and jaw. Predicted from the mouth and jaw tracks alone, on characters held out of the fit:
+
+| Track | game 95th pct | correlation off -> on |
+|---|---|---|
+| cheek puff | 0.004 | 0.00 -> 0.32 |
+| lip puff | 0.028 | 0.18 -> 0.37 |
+| nose sneer | 0.033 | 0.00 -> 0.43 |
+| chin raise | 0.072 | 0.28 -> 0.46 |
+| lip suck | 0.060 | 0.24 -> 0.45 |
+
+Given the game's own mouth the same tracks reach 0.70 to 0.96; from the model's mouth the match is lower, because the mouth itself is. The neck tracks and the upper lip did not predict (correlation -0.24 to 0.22) and were left out. **Not measured:** the nasolabial fold, the Duchenne squint and the cheek puff on a press are authored, because the game's dialogue layer never moves them (95th percentile under 0.01) and there is no reference. They are scaled by the same dial.
+
+**Jaw size.** The game animates every character's jaw track by about the same amount (90th percentile 0.27-0.32 across the six), so a bigger jaw shows through the rig, not the animation. From the rig (width between the jaw-ear bones, drop from the upper eyelids to the chin) the six characters are Jackie 1.11, Takemura 1.02, Johnny 0.99, Kerry 0.97, Panam 0.97, Judy 0.95 (the player bodies 0.93-0.95). Jackie's jaw is 17% wider than Kerry's. `jaw_presence` multiplies the coupling by this, and its range is held to 0.7-1.3. Creator jaw presets are not yet counted: the value comes from the base head.
+
+**Mouth reading from video** (`analyze/performance.py`), the 30 s test recording, before and after the lighter mouth smoothing. "Kept" is the 99th-percentile speed of the cleaned channel over the raw channel's.
+
+| Channel | fast motion kept | match with his voice | 95th pct |
+|---|---|---|---|
+| jawOpen | 0.47 -> 0.70 | 0.42 -> 0.39 | 0.153 -> 0.162 |
+| mouthClose | 0.34 -> 0.53 | 0.39 -> 0.37 | 0.008 -> 0.008 |
+| mouthFunnel | 0.33 -> 0.51 | 0.38 -> 0.35 | 0.009 -> 0.010 |
+| mouthPucker | 0.60 -> 0.83 | 0.34 -> 0.32 | 0.312 -> 0.337 |
+| mouthSmileLeft | 0.68 -> 0.79 | 0.19 -> 0.17 | 0.077 -> 0.080 |
+| mouthLowerDownLeft | 0.45 -> 0.66 | 0.27 -> 0.24 | 0.039 -> 0.035 |
+
+On a rendered clip with known mouth values (so the truth is exact): jaw 0.69 -> 0.73, pucker 0.64 -> 0.68, close 0.11 -> 0.16, smile 0.53 -> 0.55. The sizes stay far below the truth (jaw 0.37, pucker 0.19 of the true 95th percentile): the face in a small video frame gives a weak reading, so the hybrid takes the mouth from the voice and uses the video for how much. Where fast closures were lost: the one-euro filter used for the head (1.5 Hz base) cut a 67 ms lip closure from a 0.9 peak to 0.65 (0.83 with the mouth's own 3 Hz); the detector itself still misses most lip presses (`mouthClose` found 0 of 5 on the rendered clip). A lip-gap press detector built from the landmarks was too noisy (0.18-0.36 correlation, 38 false against 4 found) and was dropped. An enlarged-crop second look lowered the match (jaw 0.69 to 0.60) and is off by default (`--refine`).
+
+**Settings sweep on a real face** (`analyze.py --sweep`; the 30 s recording above, voice only, no captions). Mouth correlation with the real face by articulation 0 / 0.5 / 1 / 1.5 / 2: 0.249 / 0.252 / 0.254 / 0.256 / 0.257; purse 0.41 to 0.44. The jaw stays at 0.41 (the model's jaw is 2.6 times the video's, which reads small). Upper face, expressiveness 0 / 0.5 / 1 / 1.5 / 2: mean correlation 0.079 / -0.059 / -0.045 / -0.027 / -0.021 (the model's brows do not follow this actor's, and with expressiveness 0 there are none to compare, so that 0.079 is the cheek alone). Coupling changes nothing measurable (the real cheek reading is 0.08). **Reading:** this clip cannot choose a best value. It is an acted skit with no captions, and the upper face of a person performing a character is not set by the pitch of their voice. The recommended values stay at 1.0 for speech; for singing the only reference is the game's concert capture, whose best measured setting is `prosody_raise` 0.3 at expressiveness 1.0.
+
 ## How well the voice-driven upper face matches
 
 Same clips; the model hears only the audio. "Hit" = a model blink starting within 0.3 s of the game's. "By chance" is what blinks at the same rate, placed at random, would score.
