@@ -61,7 +61,7 @@ Those rules became a model. To check them against real people rather than one ga
 | `analyze/` | Whole-face tracking (`performance.py`), measurements (`analyze.py`), and measuring a game character's upper face (`game_upper_face.py`). Python and MediaPipe. |
 | `retarget/` | Recorded performance to face-rig curves and head angles. |
 | `model/` | Voice and words to face curves (plain Python, no dependencies; numpy makes pitch tracking faster). Includes the CMU Pronouncing Dictionary. |
-| `profiles/` | Measured settings: `speech-cyberpunk`, `singing-cyberpunk`, and any you make. |
+| `profiles/` | Measured settings: `speech-cyberpunk` (six characters), `speech-kerry` and `singing-kerry` (one character each), the game's mood presets in `moods/`, and any you make. |
 | `export/` | Track naming for each target, and the editable MediaPipe-to-Cyberpunk mapping. |
 | `test/` | Self-tests and a terminal driver. |
 | `docs/` | History, WolvenKit guide, measurements, profiles, security. |
@@ -150,8 +150,11 @@ These numbers compare the model with Cyberpunk 2077's own lipsync, for the chara
 | Blink timing (from audio alone) | 68% hits (15% by chance) | 26% hits (16% by chance) |
 | Brow raise correlation | 0.32 | rare in the game |
 | Frown correlation | 0.25 | 0.32 |
+| Across 6 characters (both sexes, 3 body types): jaw corr / p/b/m hits | 0.72–0.81 / 47–75% | |
 | Upper-face error with the right `--mood` (vs none) | 0.045 (0.147) | |
 | p/b/m closure width (game 133 ms) | 133 ms | |
+
+**A face simulator, not one character's.** Tested against six characters' own game lipsync, the jaw, closures, blink timing and the game's mood presets all carry over. Choosing the mood automatically from the voice doesn't; set it by hand. Details are in [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md).
 
 The tongue and the brows are the weakest parts so far:
 - **Tongue:** timed caption words are meant to improve it.

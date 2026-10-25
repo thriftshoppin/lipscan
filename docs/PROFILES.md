@@ -1,6 +1,6 @@
 # Profiles
 
-A profile is a JSON file in `profiles/` that tells the model how a mouth moves. Use one with `--profile <name>`. The aliases `speech` and `singing` mean `speech-cyberpunk` and `singing-cyberpunk`.
+A profile is a JSON file in `profiles/` that tells the model how a mouth moves. Use one with `--profile <name>`. The aliases `speech` and `singing` mean `speech-cyberpunk` and `singing-kerry`. `singing-cyberpunk`, the 0.2.1 name, still works.
 
 ## What's in one
 
@@ -18,6 +18,7 @@ A profile is a JSON file in `profiles/` that tells the model how a mouth moves. 
 | `viseme_strength` | Scales all diction shapes (p/b/m, f/v, oo/w, ...). |
 | `shape_lead_ms`, `shape_attack_ms`, `shape_release_ms` | Timing of the diction shapes. |
 | `symmetric` | `true` keeps left and right identical; `false` adds a slight drift, like motion capture. |
+| `soft_attack_ms`, `soft_release_ms` | How fast lip and tongue shapes other than p/b/m presses ease in and out (the game's never pop). |
 | `closure_peak` | The strongest a p/b/m press gets (default 1.0). Other lip shapes give way under a press. |
 | `neck_during_speech` | Neck and throat tracks, and the level each is held at while someone talks. |
 | `mood_auto` | Settings for `--mood auto` (a guess): reference pitch, loudness and pitch range, the threshold, and which preset counts as `intense` and which as `calm`. |
@@ -30,9 +31,16 @@ A profile is a JSON file in `profiles/` that tells the model how a mouth moves. 
 | Preset | Source |
 |---|---|
 | `neutral` | Nothing held. |
-| `scowl` | Measured: the median held levels over the game character's 7 scowling lines. |
-| `warm` | Measured: the median over their 20 other lines (their default delivery). |
+| `calm` | The game's relaxed default: soft squint only. Measured; identical in 3 characters' lines. |
+| `warm` | Slight smile, brows a touch up. Measured; identical in 3 characters' lines. |
+| `scowl` | Brows down and in, squint, one-sided nose sneer, mouth corners down. Measured; identical in 4 characters' lines. |
 | `sad`, `surprised` | Hand-made, not measured. |
+
+The measured presets are the game's own: every character's lines hold exactly the same levels, and they're lopsided the way the game's are.
+
+While a mood holds a shape, voice accents that work against it are turned into a little emphasis on it instead (25%). For example, brow raises under a scowl, or smiling corners under down-turned ones. The game never combines them, and raised brows over lowered ones tear the brow mesh.
+
+`--mood auto` is a guess, and it doesn't carry over well between voices (see docs/MEASUREMENTS.md). Pass `--voice-ref <another line of the same speaker>` so pitch is judged against that voice. Without it, only loudness and pitch range are used, and its default is `calm`. Setting the mood by hand works much better.
 
 A custom preset is a JSON file, `{"name": "...", "tracks": {"eye_l_brows_lower": 0.2, ...}}`. Pass its path to `--mood`, or load it in the viewer's Mood menu.
 

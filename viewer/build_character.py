@@ -162,8 +162,13 @@ def main():
         brows = [p for _, p in g.list(re.escape(os.path.basename(folder)) + r".*\\heb_.*\.mesh$")
                  if p.lower().startswith(folder.lower()) and base.split("__")[-1] in p]
         generic = f"base\\characters\\head\\{body.lstrip('p')}\\h0_000_{body.lstrip('p')}_c__basehead"
-        meshes = [("head", head)] + [("eyebrows", b) for b in brows[:1]] + \
-                 [("eyes", f"{generic}\\he_000_{body.lstrip('p')}_c__basehead.mesh"), ("teeth", f"{generic}\\ht_000_{body.lstrip('p')}_c__basehead.mesh")] + \
+        # eyes and teeth: the character's own (he_/ht_ next to the head) if they have them, else the body type's generic
+        own = {k: [p for _, p in g.list(re.escape(os.path.basename(folder)) + rf".*\\{k}_[^\\]*\.mesh$")
+                   if p.lower().startswith(folder.lower()) and not re.search(r"_(old|young|cry|dec|damaged)\.mesh$", p)]
+               for k in ("he", "ht")}
+        eyes = own["he"][0] if own["he"] else f"{generic}\\he_000_{body.lstrip('p')}_c__basehead.mesh"
+        teeth = own["ht"][0] if own["ht"] else f"{generic}\\ht_000_{body.lstrip('p')}_c__basehead.mesh"
+        meshes = [("head", head)] + [("eyebrows", b) for b in brows[:1]] + [("eyes", eyes), ("teeth", teeth)] + \
                  [(os.path.splitext(os.path.basename(x))[0], x.replace("/", "\\")) for x in a.extra]
         print(f"  facial setup: {setup}\n  skeleton:     {rig}")
 

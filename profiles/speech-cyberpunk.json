@@ -1,6 +1,6 @@
 {
   "name": "speech-cyberpunk",
-  "about": "Spoken dialogue, measured from 26 lines of one Cyberpunk 2077 character (the game's JALI lipsync layer) against their voice recordings. Jaw correlation with the game: 0.79.",
+  "about": "Spoken dialogue for Cyberpunk 2077 characters in general: the speech-kerry fit, with blink and brow rates, frown strength, jaw size and the auto-mood reference averaged over 6 characters' game lipsync (each counted once). Mood presets are the game's own, shared by all characters.",
   "source": "Cyberpunk 2077 (measured numbers only; no game data is included)",
   "notes": {
     "jaw_mean": "loudness (dB after normalising) -> average jaw opening (0..1) at that loudness",
@@ -21,29 +21,31 @@
     "upper_face": "voice-driven blinks, brows, squints, gaze and head (see docs/PROFILES.md)",
     "closure_peak": "the strongest a p/b/m press gets (other lip shapes give way under it)",
     "mood_auto": "--mood auto: a guess from the voice. score = (pitch - pitch_ref)/pitch_scale + (loudness - loud_ref)/loud_scale - (pitch range - range_ref)/range_scale; above threshold -> intense, else calm",
-    "neck_during_speech": "neck/throat tracks held at the game's average level while talking (they don't follow jaw, loudness or pitch in the game data)"
+    "neck_during_speech": "neck/throat tracks held at the game's average level while talking (they don't follow jaw, loudness or pitch in the game data)",
+    "soft_attack_ms": "lip and tongue shapes other than p/b/m presses ease in (ms); the game's change no faster than this",
+    "soft_release_ms": "and ease out"
   },
   "jaw_mean": {
-    "-60": 0.03,
-    "-54": 0.07,
-    "-48": 0.1,
-    "-42": 0.13,
-    "-36": 0.17,
-    "-30": 0.22,
-    "-24": 0.27,
-    "-18": 0.3,
-    "-12": 0.35
+    "-60": 0.027,
+    "-54": 0.064,
+    "-48": 0.091,
+    "-42": 0.119,
+    "-36": 0.155,
+    "-30": 0.201,
+    "-24": 0.246,
+    "-18": 0.274,
+    "-12": 0.319
   },
   "jaw_peak": {
-    "-60": 0.1,
-    "-54": 0.2,
-    "-48": 0.23,
-    "-42": 0.24,
-    "-36": 0.3,
-    "-30": 0.35,
-    "-24": 0.44,
-    "-18": 0.46,
-    "-12": 0.47
+    "-60": 0.091,
+    "-54": 0.182,
+    "-48": 0.21,
+    "-42": 0.219,
+    "-36": 0.274,
+    "-30": 0.319,
+    "-24": 0.401,
+    "-18": 0.42,
+    "-12": 0.429
   },
   "peakiness": 0.7,
   "contrast": 2.0,
@@ -86,11 +88,11 @@
       "head_nod_deg / head_nods_per_minute": "chin dips on stressed syllables",
       "head_sway_deg": "slow head sway"
     },
-    "blinks_per_minute": 18.3,
+    "blinks_per_minute": 19.9,
     "blink_peak": 0.85,
     "blink_pause_min_s": 0.3,
     "blink_max_gap_s": 3.5,
-    "brow_raises_per_minute": 8,
+    "brow_raises_per_minute": 12.9,
     "brow_raise_threshold": 0.6,
     "brow_raise_peak": 0.5,
     "brow_lead_ms": 100,
@@ -100,7 +102,7 @@
     "brow_follow_s": 0,
     "brow_min_gap_s": 1.5,
     "pitch_weight": 0.3,
-    "frown_level": 0.15,
+    "frown_level": 0.206,
     "frown_lead_ms": 300,
     "frown_attack_ms": 400,
     "frown_release_ms": 600,
@@ -113,15 +115,14 @@
   },
   "closure_peak": 0.95,
   "mood_auto": {
-    "pitch_ref": 5.4,
     "pitch_scale": 4.0,
     "loud_ref": -28.0,
     "loud_scale": 2.0,
-    "range_ref": 4.1,
+    "range_ref": 3.8,
     "range_scale": 2.0,
     "threshold": 0.5,
     "intense": "scowl",
-    "calm": "warm"
+    "calm": "calm"
   },
   "neck_during_speech": {
     "neck_throat_open": 0.14,
@@ -133,5 +134,27 @@
     "neck_l_sternocleidomastoid_flex": 0.01,
     "neck_r_platysma_flex": 0.04,
     "neck_r_sternocleidomastoid_flex": 0.01
+  },
+  "soft_attack_ms": 100,
+  "soft_release_ms": 130,
+  "measured_on": {
+    "kerry": {
+      "lines": 26
+    },
+    "judy": {
+      "lines": 55
+    },
+    "panam": {
+      "lines": 35
+    },
+    "jackie": {
+      "lines": 10
+    },
+    "johnny": {
+      "lines": 5
+    },
+    "takemura": {
+      "lines": 11
+    }
   }
 }

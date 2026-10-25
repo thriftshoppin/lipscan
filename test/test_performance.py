@@ -204,5 +204,25 @@ with tempfile.TemporaryDirectory() as tmp:
     custom = lipsync.simulate_lipsync(wav, profile="speech", mood={"name": "mine", "tracks": {"eye_l_widen": 0.5}})
     check("mood: a custom preset works", min(custom["tracks"]["eye_l_widen"]) >= 0.5)
 
+    # ---- 0.2.2 ----
+    plain = lipsync.simulate_lipsync(wav, text="maybe. bob ate", profile="speech", seed=2)["tracks"]
+    raised = max(plain.get("eye_l_brows_raise_in", [0]))
+    check("mood: under a held scowl the brows never raise (the game never combines them)",
+          raised > 0.1 and max(st.get("eye_l_brows_raise_in", [0])) < 0.01, f"raise without mood {raised:.2f}")
+    check("mood: a cancelled raise becomes a little scowl emphasis (<= 25% of it)",
+          max(st["eye_l_brows_lower"]) <= 0.324 + max(plain.get("eye_l_brows_lower", [0])) + 0.25 * raised + 1e-6 and max(st["eye_l_brows_lower"]) > 0.33)
+    check("mood: presets keep the game's lopsided sides", lipsync.load_mood("scowl")["tracks"]["eye_r_brows_lower"] < lipsync.load_mood("scowl")["tracks"]["eye_l_brows_lower"])
+    check("mood: the game's calm preset is there", "calm" in lipsync.mood_names() and lipsync.load_mood("calm")["tracks"])
+    ref = lipsync.voice_pitch(wav)
+    a2 = lipsync.simulate_lipsync(wav, profile="speech", mood="auto", speaker_pitch=ref)
+    check("mood: auto can judge pitch against the same speaker", ref is not None and a2["mood"]["name"] in lipsync.mood_names(), f"ref {ref}")
+    oo = lipsync.simulate_lipsync(wav, text="who woo you", profile="speech")["tracks"]
+    pf = [p + f for p, f in zip(oo.get("lips_l_purse", [0] * 99), oo.get("lips_l_funnel", [0] * 99))]
+    check("lips: purse and funnel never stack past what the game uses (0.6)", max(pf) <= 0.6 + 1e-6, f"max {max(pf):.2f}")
+    jumps = [abs(b - a) for k, v in plain.items() if k.startswith("lips_") and "together" not in k for a, b in zip(v, v[1:])]
+    check("lips: shapes other than p/b/m presses ease in and out (no pops over 0.25 per frame)", max(jumps) <= 0.25, f"max jump {max(jumps):.2f}")
+    check("profiles: speech-kerry (one voice) and speech-cyberpunk (six characters) both load",
+          lipsync.load_profile("speech-kerry")["name"] == "speech-kerry" and lipsync.load_profile("speech")["name"] == "speech-cyberpunk")
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

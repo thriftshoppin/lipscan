@@ -148,6 +148,56 @@ Correlations don't change with a mood: a held level doesn't change a curve's sha
 
 The model holds them there while someone talks.
 
+## Across characters (0.2.2): a face simulator, or a Kerry simulator?
+
+Everything above was first measured on one character. To test whether it carries over, LipScan was scored against the game's own dialogue lipsync of six characters. The test used their own voice lines and subtitle words, and each character's own head and rig.
+
+| | Rig | Lines |
+|---|---|---|
+| Kerry | male, average build | 26 |
+| Judy | female | 55 |
+| Panam | female | 35 |
+| Jackie | male, big build | 10 |
+| Johnny | male, average build | 5 |
+| Takemura | male, older | 11 |
+
+Jackie, Johnny and Takemura have few lines in the lipsync system, so their numbers are rough.
+
+**The rigs:** all six face rigs have the same 414 tracks in the same order, and the same 121 face poses, 255 correctives, 18 tongue poses and 12 eye poses. Female and big-male rigs don't differ in structure.
+
+**Trained on Kerry, tested on everyone** (`speech-kerry`):
+
+| | Jaw corr | p/b/m hits ±3 fr | False closures | Blink hits (chance) | Upper-face error, no mood | Upper-face error, right mood |
+|---|---|---|---|---|---|---|
+| Kerry (trained on) | 0.80 | 51% | 19% | 67% (15%) | 0.144 | 0.042 |
+| Judy | 0.78 | 58% | 19% | 39% (10%) | 0.095 | 0.049 |
+| Panam | 0.72 | 51% | 22% | 68% (19%) | 0.047 | 0.047 |
+| Jackie | 0.80 | 58% | 17% | 40% (13%) | 0.129 | 0.055 |
+| Johnny | 0.81 | 47% | 41% | 33% (10%) | 0.125 | 0.047 |
+| Takemura | 0.79 | 75% | 33% | 33% (8%) | 0.131 | 0.050 |
+
+**Leave one character out** (each character scored with a profile averaged over the other five): the mouth and blink scores don't change; jaw correlation is unaffected by jaw size. The upper-face error with the right mood is 0.049–0.062. So nothing in the mouth was Kerry-specific to begin with.
+
+**The moods are the game's, not Kerry's.** The levels a line holds are identical across characters, to the third decimal. Every scowling line of Kerry, Judy, Jackie and Takemura holds the same brows-down 0.324/0.30 with the same squints and nose sneer, and Kerry's, Johnny's and Takemura's "warm" lines are identical too. There's also a game-wide `calm` (soft squint only), and lines that hold nothing (all of Panam's).
+
+**Auto mood does NOT carry over.** It was right for 0–77% of a character's lines, and it often made the upper face worse than no mood. Pitch is the main reason: voices differ by up to 11 semitones between these characters (Johnny 0.9, Panam 11.9). Since 0.2.2, auto only uses pitch relative to the same speaker (`--voice-ref`), but even so, mood is better set by hand.
+
+**Profiles.** `speech-cyberpunk` is now the cross-character average:
+- blinks: 19.9 a minute
+- brow raises: about 13 a minute
+- frown: 40% stronger
+- jaw: curve scaled to 0.91 to remove an overshoot on most characters
+
+Kerry's own fit is kept as `speech-kerry`, and the singing profile is now `singing-kerry` (only one singer measured).
+
+**A face the game never shipped:** V's base head with character-creator presets (eyes 3, nose 12, mouth 7, jaw 14, ears 5). It builds, solves and plays both a game clip and LipScan output cleanly.
+
+**Verdict: a face simulator, with caveats.**
+- Jaw, closures, blink timing and the game's moods carry over to every character tested: both sexes, three body types, young and old, and a creator-built face.
+- Choosing the mood from the voice doesn't carry over; set it by hand.
+- Brow timing within a line is still weak for everyone (an actor's choice the audio doesn't show).
+- Singing is measured on one character only.
+
 ## How well the voice-driven upper face matches
 
 Same clips; the model hears only the audio. "Hit" = a model blink starting within 0.3 s of the game's. "By chance" is what blinks at the same rate, placed at random, would score.

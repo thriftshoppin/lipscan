@@ -69,6 +69,21 @@ Not included yet: skin tones, textures, makeup, scars, tattoos, hair, beards (th
 - **Mood:** a held expression (neutral, scowl, warm, sad, surprised, or a custom preset JSON) added to LipScan clips in A and/or B. The game's clips carry their own mood.
 - **Video pane:** shows the source frames in sync when a trace folder is loaded.
 
+**A test set to step through.** Serve a manifest and open `?demo=/pack/demo/manifest.json`. The viewer then shows a **Test set** panel:
+- **Character** and **Line** menus, plus **Prev** and **Next** buttons
+- each line plays the game's lipsync in A and LipScan's version from the voice alone in B, side by side with the voice, and the game's mood applied to B
+- `&demoChar=2&demoLine=1` opens a specific line
+
+The manifest lists your own files (keep them private, like packs):
+
+```json
+{"characters": [{"name": "Judy", "pack": "/pack/judy/", "creator": {"jaw": "07"},
+  "lines": [{"text": "...", "game": "/pack/demo/judy/scene.glb", "clip": "f_1618640F842B6000",
+             "lipscan": "/pack/demo/judy/line.json", "audio": "/pack/demo/judy/line.wav", "mood": "calm"}]}]}
+```
+
+`creator` (optional, player heads) sets character-creator presets.
+
 **From a URL.** When served over http (`node serve.mjs`, with `LIPSCAN_PACKS` and `LIPSCAN_DATA` set; this computer only), files can be given in the address:
 
 ```

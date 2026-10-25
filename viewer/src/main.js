@@ -38,11 +38,22 @@ function resize() {
 }
 new ResizeObserver(resize).observe(view);
 
+// Moves a material's vertices `metres` toward the camera after skinning (depth only; on screen they barely move).
+function liftTowardCamera(material, metres) {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace("#include <project_vertex>",
+      `#include <project_vertex>
+  mvPosition.xyz -= normalize(mvPosition.xyz) * ${metres.toFixed(4)};
+  gl_Position = projectionMatrix * mvPosition;`);
+  };
+  return material;
+}
+
 const MATERIALS = {
   head: () => new THREE.MeshStandardMaterial({ color: 0xc9b8aa, roughness: 0.62 }),
-  // eyebrow cards sit a hair above the skin; the depth bias keeps skin from poking through when lids and brows move
-  eyebrows: () => new THREE.MeshStandardMaterial({ color: 0x3a2f28, roughness: 0.9, transparent: true, opacity: 0.85,
-    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -60 }),
+  // eyebrow cards sit a hair above the skin; when the brows move the skin slides over them (the game's own clips too),
+  // so draw them a few millimetres toward the camera (like a decal) instead of relying on a depth bias alone
+  eyebrows: () => liftTowardCamera(new THREE.MeshStandardMaterial({ color: 0x3a2f28, roughness: 0.9, transparent: true, opacity: 0.85 }), 0.003),
   eyes: () => new THREE.MeshStandardMaterial({ color: 0xe9e6e0, roughness: 0.25 }),
   teeth: () => new THREE.MeshStandardMaterial({ color: 0xeee6d2, roughness: 0.4 }),
   other: () => new THREE.MeshStandardMaterial({ color: 0x8c8580, roughness: 0.7 }),
@@ -293,6 +304,12 @@ function setCreator(choice) {
 // A held expression added on top of LipScan clips (the voice-driven accents ride on it). Game clips already hold
 // their own mood, so they're left alone. Like the game, raised brows give way while the eyes blink.
 const moods = { ...MOODS };
+const OPPOSITES = ["l", "r"].flatMap((s) => [
+  [`eye_${s}_brows_lower`, [`eye_${s}_brows_raise_in`, `eye_${s}_brows_raise_out`]],
+  [`eye_${s}_brows_raise_in`, [`eye_${s}_brows_lower`, `eye_${s}_brows_lateral`]],
+  [`lips_${s}_corner_dn`, [`lips_${s}_corner_up`]],
+  [`lips_${s}_corner_up`, [`lips_${s}_corner_dn`]],
+]);
 let moodPreset = null;
 function setMood(name) {
   moodPreset = name && moods[name] && Object.keys(moods[name].tracks).length ? moods[name] : null;
@@ -313,7 +330,26 @@ function applyMood(slot, out) {
   const clip = state.clip[slot];
   if (!moodPreset || !clip || clip.kind !== "lipscan" || !$(`mood${slot}`).checked || !state.solver) return;
   const idx = state.solver.trackIndex;
-  for (const [name, level] of Object.entries(moodPreset.tracks)) {
+  // a track's value may sit under its own name or its dialogue-layer name (cyberpunk exports)
+  const both = (name) => [idx.get(name), idx.get(`${name}LipsyncPoseOutput`)].filter((i) => i !== undefined);
+  const value = (name) => both(name).reduce((a, i) => a + out[i], 0);
+  // the game never raises the brows inside a held scowl (or smiles inside held down-turned corners): an accent on the
+  // opposite shape becomes emphasis on the held one (same rule as the model's apply_mood)
+  const held = moodPreset.tracks;
+  for (const [keep, against] of OPPOSITES) {
+    const h = held[keep] || 0;
+    if (h <= 0) continue;
+    const scale = Math.max(0, 1 - h / 0.2);
+    let carry = 0;
+    for (const name of against) {
+      if (held[name]) continue;
+      carry = Math.max(carry, value(name) * (1 - scale));
+      for (const i of both(name)) out[i] *= scale;
+    }
+    const k = idx.get(keep);
+    if (carry && k !== undefined) out[k] += 0.25 * carry;
+  }
+  for (const [name, level] of Object.entries(held)) {
     const i = idx.get(name);
     if (i !== undefined) out[i] = Math.min(1, out[i] + level);
   }
@@ -668,14 +704,99 @@ function useClip(slot, want) {
 // When served over http, files can be given in the address:
 //   ?pack=folder/&a=file&b=file&audio=file&video=trace-folder/&clip=name&clipB=name&view=ab&t=seconds&head=0&cam=front&mood=scowl&jaw=7&eyes=3 (player heads)
 //   clip (or clipA) picks A's clip, clipB picks B's: a bare id, the full name or the list label. view: a, b or ab.
-async function fromUrl() {
-  const q = new URLSearchParams(location.search);
-  if (!q.get("pack") || location.protocol === "file:") return;
-  const get = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error(`${u}: HTTP ${r.status}`); return new File([await r.blob()], decodeURIComponent(u.split("/").pop().split("?")[0])); };
-  const base = q.get("pack").replace(/\/?$/, "/");
+const fetched = new Map(); // url -> File (animation files are big; fetch each once)
+async function get(u) {
+  if (fetched.has(u)) return fetched.get(u);
+  const r = await fetch(u);
+  if (!r.ok) throw new Error(`${u}: HTTP ${r.status}`);
+  const f = new File([await r.blob()], decodeURIComponent(u.split("/").pop().split("?")[0]));
+  if (/\.glb$/i.test(u)) fetched.set(u, f);
+  return f;
+}
+let loadedPack = null;
+async function loadPackUrl(url) {
+  const base = url.replace(/\/?$/, "/");
+  if (loadedPack === base) return;
   const cj = await get(base + "character.json");
   const pack = JSON.parse(await cj.text());
   await loadCharacter([cj, ...(await Promise.all(pack.meshes.map((m) => get(base + m.file))))]);
+  loadedPack = base;
+}
+
+// ---------------- demo: a test set of characters and lines (?demo=manifest.json) ----------------
+// manifest: {characters: [{name, pack, creator?, lines: [{text, game, clip, lipscan, audio, mood}]}]}
+let demo = null;
+async function startDemo(url) {
+  demo = await (await fetch(url)).json();
+  $("demoBox").hidden = false;
+  const cs = $("demoChar");
+  cs.innerHTML = "";
+  demo.characters.forEach((c, i) => cs.add(new Option(`${c.name} (${c.lines.length})`, i)));
+  cs.onchange = () => { fillDemoLines(); loadDemo(); };
+  $("demoLine").onchange = () => loadDemo();
+  const step = (d) => {
+    const ls = $("demoLine");
+    let li = +ls.value + d;
+    let ci = +cs.value;
+    if (li < 0 || li >= ls.options.length) {
+      ci = (ci + (d > 0 ? 1 : demo.characters.length - 1)) % demo.characters.length;
+      cs.value = ci;
+      fillDemoLines();
+      li = d > 0 ? 0 : $("demoLine").options.length - 1;
+    }
+    $("demoLine").value = li;
+    loadDemo();
+  };
+  $("demoPrev").onclick = () => step(-1);
+  $("demoNext").onclick = () => step(1);
+  const q = new URLSearchParams(location.search);
+  if (q.get("demoChar")) cs.value = Math.min(demo.characters.length - 1, +q.get("demoChar"));
+  fillDemoLines();
+  if (q.get("demoLine")) $("demoLine").value = Math.min($("demoLine").options.length - 1, +q.get("demoLine"));
+  await loadDemo();
+}
+function fillDemoLines() {
+  const c = demo.characters[+$("demoChar").value];
+  const ls = $("demoLine");
+  ls.innerHTML = "";
+  c.lines.forEach((l, i) => ls.add(new Option(`${i + 1}. ${l.text.slice(0, 48)}${l.text.length > 48 ? "…" : ""}`, i)));
+}
+let demoBusy = false;
+async function loadDemo() {
+  if (demoBusy) return;
+  demoBusy = true;
+  const c = demo.characters[+$("demoChar").value];
+  const l = c.lines[+$("demoLine").value];
+  $("demoText").textContent = "loading…";
+  try {
+    setPlaying(false);
+    await loadPackUrl(c.pack);
+    setCreator(c.creator || {});
+    await loadAnim("A", await get(l.game));
+    useClip("A", l.clip);
+    await loadAnim("B", await get(l.lipscan));
+    loadAudio(await get(l.audio));
+    $("moodA").checked = false;
+    $("moodB").checked = true;
+    setMood(l.mood && moods[l.mood] ? l.mood : "neutral");
+    $("viewMode").value = "AB";
+    layout();
+    seek(0);
+    $("demoText").textContent = `"${l.text}"  ·  game mood: ${l.mood || "?"}  ·  A = game, B = LipScan (voice only)`;
+  } catch (e) { $("demoText").textContent = String(e.message || e); }
+  demoBusy = false;
+}
+
+async function fromUrl() {
+  const q = new URLSearchParams(location.search);
+  if (location.protocol === "file:") return;
+  if (q.get("demo")) {
+    await startDemo(q.get("demo"));
+    if (q.get("cam") === "front") { $("frontCam").checked = true; $("frontCam").dispatchEvent(new Event("change")); }
+    return;
+  }
+  if (!q.get("pack")) return;
+  await loadPackUrl(q.get("pack"));
   for (const s of ["a", "b"]) if (q.get(s)) await loadAnim(s.toUpperCase(), await get(q.get(s)));
   const clipA = q.get("clipA") || q.get("clip");
   if (clipA) useClip(state.anim.A ? "A" : "B", clipA);

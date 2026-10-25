@@ -1,6 +1,6 @@
 {
-  "name": "singing-cyberpunk",
-  "about": "Singing, measured from one Cyberpunk 2077 character's face capture during a concert performance against the isolated vocal stem. Jaw correlation: 0.76.",
+  "name": "singing-kerry",
+  "about": "Singing, measured from ONE Cyberpunk 2077 character's concert motion capture (about 2.5 minutes) against the isolated vocal. Jaw correlation 0.76. The only singing data available so far.",
   "source": "Cyberpunk 2077 (measured numbers only; no game data is included)",
   "notes": {
     "close_lead_ms": "singers start closing well before a note ends",
@@ -8,7 +8,9 @@
     "viseme_strength": "sung vowels dominate; consonants are lighter",
     "symmetric": "motion capture is a little lopsided",
     "upper_face": "voice-driven blinks, brows, squints, gaze and head (see docs/PROFILES.md)",
-    "closure_peak": "the strongest a p/b/m press gets (other lip shapes give way under it)"
+    "closure_peak": "the strongest a p/b/m press gets (other lip shapes give way under it)",
+    "soft_attack_ms": "lip and tongue shapes other than p/b/m presses ease in (ms)",
+    "soft_release_ms": "and ease out"
   },
   "jaw_mean": {
     "-60": 0.03,
@@ -111,5 +113,7 @@
     "head_nods_per_minute": 20,
     "head_sway_deg": 1.5
   },
-  "closure_peak": 0.95
+  "closure_peak": 0.95,
+  "soft_attack_ms": 100,
+  "soft_release_ms": 130
 }

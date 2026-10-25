@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.2 (2026-10-25)
+
+Brows that map properly, polish, and a test across characters.
+
+- **Brows under a mood:**
+  - **Cause:** a held scowl (brows down) got the voice's brow-raise accents (0.48) added on top. Raised and lowered brows together is a combination the game never uses, and it flattened the scowl and tore the brow mesh.
+  - **The fix:** shapes that work against a held mood (raise vs lower, corners up vs down) now turn into a little emphasis on the held shape instead (25%). The same rule is in the model (`apply_mood`) and the viewer.
+- **Mood presets, per side:** they're now measured per side; the game's scowl is lopsided (right brow 0.30 vs left 0.32, squints 0.25/0.18/0.20 vs 0.30/0.22/0.30). Staging gaze (looking off to the side) is left out of the presets.
+- **Teeth through the lips:** purse and funnel no longer stack. In the game they never do: when one is up, the other is about 0. Their sum is capped at 0.6, so puckered lips stay over the teeth.
+- **Pops:** lip and tongue shapes other than p/b/m presses now ease in over 100 ms and out over 130 ms (profile `soft_attack_ms` / `soft_release_ms`). Their frame-to-frame jumps were 3–5 times the game's; now they're 1.2–2 times, with shapes at about 90% strength and hits unchanged.
+- **Across characters:** tested on six characters' own game lipsync (Kerry, Judy, Panam, Jackie, Johnny, Takemura), and on a V face built from character-creator presets.
+  - **What carries over:** jaw corr 0.72–0.81, p/b/m hits 47–75%, blink hits 33–68% (chance 8–19%), and an upper-face error of 0.04–0.06 with the right mood, for every character.
+  - **Rigs:** all six rigs are structurally identical.
+  - **Verdict:** a face simulator, with caveats (docs/MEASUREMENTS.md).
+- **Moods are the game's:** the held levels are identical across characters, so the presets describe the game, not Kerry. New: `calm` (the game's soft-squint default).
+- **Profiles:**
+  - `speech-cyberpunk` is now the cross-character average: blink and brow rates, frown strength, jaw size.
+  - Kerry's own fit is `speech-kerry`.
+  - `singing-cyberpunk` is renamed `singing-kerry`; the old name still works.
+- **Auto mood:** pitch now only counts relative to the same speaker (`--voice-ref`). It didn't carry over between voices; set moods by hand.
+- **Viewer:**
+  - **Test-set panel** (`?demo=manifest.json`): pick a character and a line, or step with Prev/Next, to see the game's lipsync (A) next to LipScan's from the voice alone (B), with audio and the game's mood. `demoChar` and `demoLine` address parameters link straight to a line.
+  - **Converter:** uses a character's own eyes and teeth when they have them (female heads had none before).
+- **Viewer, eyebrows:** they're drawn 3 mm toward the camera, like a decal. When the brows move, the skin slides over the eyebrow cards; that tore even on the game's own clips. They're clean now with raises, blinks and frowns.
+
 ## 0.2.1 (2026-10-24)
 
 Polish from a frame-by-frame review against the game.

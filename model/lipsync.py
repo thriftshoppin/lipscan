@@ -4,7 +4,8 @@ that has an "upper_face" section) blinks, brows, squints, gaze and small head no
 
 How the jaw, lips and tongue move is set by a PROFILE (profiles/*.json): the loudness-to-jaw curve, how far the
 mouth runs ahead of the sound, opening and closing speeds, and so on. The first two profiles were measured from
-Cyberpunk 2077 (speech-cyberpunk, singing-cyberpunk); analyze/analyze.py can measure new ones from real people.
+Cyberpunk 2077 (speech-cyberpunk: averaged over six characters; speech-kerry and singing-kerry: one character);
+analyze/analyze.py can measure new ones from real people.
 
 Give it the words too and it adds diction: lips press shut on p/b/m, the lower lip tucks on f/v, lips purse on
 oo/w, the tongue moves on t/d/n/l/th, and so on. With word times (for example from captions) each word's shapes
@@ -13,7 +14,7 @@ stay inside its own time span.
 No add-ons needed: plain Python 3.8+.
 
     python lipsync.py voice.wav --text "Maybe you should hang onto this." --preview
-    python lipsync.py vocal.wav --profile singing-cyberpunk --out song.json
+    python lipsync.py vocal.wav --profile singing --out song.json
     python lipsync.py clip.wav --words words.json --export arkit52 --out clip.json   # [[0.42, "maybe"], ...]
 
 Output: JSON {"fps": 30, "profile": ..., "tracks": {"jaw_mid_open": [...], ...}, "head": {"pitch": [...], ...}}.
@@ -42,7 +43,7 @@ FPS = 30
 # ----------------------------------------------------------------------------
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROFILE_DIR = os.path.join(os.path.dirname(HERE), "profiles")
-ALIASES = {"speech": "speech-cyberpunk", "singing": "singing-cyberpunk"}
+ALIASES = {"speech": "speech-cyberpunk", "singing": "singing-kerry", "singing-cyberpunk": "singing-kerry"}  # 0.2.1 name kept
 
 
 def load_profile(name_or_path):
@@ -69,11 +70,11 @@ def profile_names():
 VISEMES = {
     "BMP": {"lips_together_up": 1.0, "lips_together_dn": 1.0},              # p b m
     "FV":  {"lips_suck_dn": 0.57, "lips_l_lower_raise": 0.31, "lips_r_lower_raise": 0.31},  # f v
-    "OO":  {"lips_l_purse": 0.53, "lips_r_purse": 0.53, "lips_l_funnel": 0.35, "lips_r_funnel": 0.35},
+    # purse and funnel never stack in the game (when one is up the other is ~0); stacked, they push the lips over the teeth
+    "OO":  {"lips_l_purse": 0.53, "lips_r_purse": 0.53},
     "W":   {"lips_l_purse": 0.53, "lips_r_purse": 0.53},
-    "O":   {"lips_l_funnel": 0.35, "lips_r_funnel": 0.35, "lips_l_purse": 0.25, "lips_r_purse": 0.25},
-    "CH":  {"lips_l_funnel": 0.35, "lips_r_funnel": 0.35, "lips_l_purse": 0.3, "lips_r_purse": 0.3,
-            "tongue_mid_base_up": 1.0},                                       # sh ch j
+    "O":   {"lips_l_funnel": 0.35, "lips_r_funnel": 0.35},
+    "CH":  {"lips_l_funnel": 0.35, "lips_r_funnel": 0.35, "tongue_mid_base_up": 1.0},   # sh ch j
     "TD":  {"tongue_mid_tip_up": 0.32, "tongue_mid_lift": 0.5},               # t d n
     "L":   {"tongue_mid_lift": 1.0, "tongue_mid_tip_up": 0.32},
     "TH":  {"tongue_mid_base_fwd": 0.5, "tongue_mid_tip_dn": 0.31},
@@ -349,6 +350,7 @@ def place_timed_words(words, db, fps=FPS, voiced_db=-45, longest=1.0):
 
 
 CLOSURE = ("lips_together_up", "lips_together_dn")
+LIP_FORWARD_MAX = 0.6   # purse + funnel together; the game's largest is 0.62 (99th percentile 0.42)
 
 
 def diction_tracks(placed, n, cfg, fps=FPS, quiet=None):
@@ -378,7 +380,18 @@ def diction_tracks(placed, n, cfg, fps=FPS, quiet=None):
                 if quiet[min(n - 1, f + lead)]:          # the shape runs `lead` frames ahead of its sound
                     t[f] = 0.0
     quick = dict(cfg, attack_ms=cfg["shape_attack_ms"], release_ms=cfg["shape_release_ms"], max_open_speed=99, max_close_speed=99)
-    out = {k: smooth(v, quick, fps) for k, v in tracks.items()}
+    # p/b/m presses (and the jaw scale) are sharp in the game; the other lip and tongue shapes ease in and out more slowly
+    soft = dict(cfg, attack_ms=cfg.get("soft_attack_ms", cfg["shape_attack_ms"]), release_ms=cfg.get("soft_release_ms", cfg["shape_release_ms"]),
+                max_open_speed=99, max_close_speed=99)
+    out = {k: smooth(v, quick if k in CLOSURE else soft, fps) for k, v in tracks.items()}
+    # neighbouring shapes overlap after smoothing: keep purse + funnel within what the game ever uses
+    for side in "lr":
+        p_, f_ = out.get(f"lips_{side}_purse"), out.get(f"lips_{side}_funnel")
+        if p_ and f_:
+            for k in range(n):
+                tot = p_[k] + f_[k]
+                if tot > LIP_FORWARD_MAX:
+                    p_[k], f_[k] = p_[k] * LIP_FORWARD_MAX / tot, f_[k] * LIP_FORWARD_MAX / tot
     cap = cfg.get("closure_peak", 1.0)
     if any(k in out for k in CLOSURE):
         press = [max(out.get(k, [0.0] * n)[f] for k in CLOSURE) for f in range(n)]
@@ -605,9 +618,17 @@ def load_mood(mood):
         return json.load(fh)
 
 
-def estimate_mood(db, samples, rate, cfg, fps=FPS):
-    """A GUESS at the mood from the voice alone: a higher, louder, flatter delivery than the profile's reference
-    reads as intense (the profile's "intense" mood), anything else as its "calm" mood. Returns (name, score)."""
+def voice_pitch(wav_path):
+    """A speaker's typical pitch (median, semitones above 100 Hz) from one recording; None if unvoiced."""
+    s, r = load_wav(wav_path)
+    heard = sorted(p for p in pitch_track(s, r, len(loudness_db(s, r))) if p is not None)
+    return heard[len(heard) // 2] if len(heard) >= 5 else None
+
+
+def estimate_mood(db, samples, rate, cfg, fps=FPS, speaker_pitch=None):
+    """A GUESS at the mood from the voice alone: a louder, flatter delivery (and, when the speaker's own typical pitch
+    is known, a higher one) reads as intense (the profile's "intense" mood), anything else as its "calm" mood.
+    Pitch only counts relative to the same speaker: voices differ by an octave between people. Returns (name, score)."""
     m = cfg.get("mood_auto")
     if not m:
         return "neutral", 0.0
@@ -620,14 +641,41 @@ def estimate_mood(db, samples, rate, cfg, fps=FPS):
         return m["calm"], 0.0
     med = heard[len(heard) // 2]
     iqr = heard[3 * len(heard) // 4] - heard[len(heard) // 4]
-    score = (med - m["pitch_ref"]) / m["pitch_scale"] + (sum(loud) / len(loud) - m["loud_ref"]) / m["loud_scale"] \
-        - (iqr - m["range_ref"]) / m["range_scale"]
+    score = (sum(loud) / len(loud) - m["loud_ref"]) / m["loud_scale"] - (iqr - m["range_ref"]) / m["range_scale"]
+    if speaker_pitch is not None:
+        score += (med - speaker_pitch) / m["pitch_scale"]
     return (m["intense"] if score > m["threshold"] else m["calm"]), round(score, 2)
 
 
+# Shapes that work against each other. The game never raises the brows inside a held scowl, or smiles inside held
+# down-turned corners: under a held mood, an accent on the opposite shape becomes emphasis on the held one instead
+# (raised brows over lowered ones also push the skin through the eyebrow cards).
+OPPOSITES = [(f"eye_{s}_brows_lower", [f"eye_{s}_brows_raise_in", f"eye_{s}_brows_raise_out"]) for s in "lr"] + \
+            [(f"eye_{s}_brows_raise_in", [f"eye_{s}_brows_lower", f"eye_{s}_brows_lateral"]) for s in "lr"] + \
+            [(f"lips_{s}_corner_dn", [f"lips_{s}_corner_up"]) for s in "lr"] + \
+            [(f"lips_{s}_corner_up", [f"lips_{s}_corner_dn"]) for s in "lr"]
+OPPOSE_FULL = 0.2      # a held level this high removes the opposite accents completely
+OPPOSE_CARRY = 0.25    # share of a removed accent that goes into the held shape as emphasis
+
+
 def apply_mood(tracks, preset, n, blink_peak=0.85):
-    """Hold the preset's levels for the whole line; the accents already in `tracks` ride on top."""
-    for name, level in preset.get("tracks", {}).items():
+    """Hold the preset's levels for the whole line; the accents already in `tracks` ride on top. Accents that
+    work against a held shape turn into emphasis on it (OPPOSITES)."""
+    held = preset.get("tracks", {})
+    for keep, against in OPPOSITES:
+        h = held.get(keep, 0.0)
+        if h <= 0:
+            continue
+        scale = max(0.0, 1 - h / OPPOSE_FULL)
+        carry = [0.0] * n
+        for name in against:
+            if name in tracks and not held.get(name):
+                carry = [max(c, v * (1 - scale)) for c, v in zip(carry, tracks[name])]
+                tracks[name] = [v * scale for v in tracks[name]]
+        if any(carry):
+            base = tracks.get(keep, [0.0] * n)
+            tracks[keep] = [b + OPPOSE_CARRY * c for b, c in zip(base, carry)]
+    for name, level in held.items():
         base = tracks.get(name, [0.0] * n)
         tracks[name] = [min(1.0, level + v) for v in base]
     blink = tracks.get("eye_l_blink")
@@ -640,12 +688,13 @@ def apply_mood(tracks, preset, n, blink_peak=0.85):
 # ----------------------------------------------------------------------------
 # Main entry point
 # ----------------------------------------------------------------------------
-def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, mood=None):
+def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, mood=None, speaker_pitch=None):
     """Returns {"fps", "profile", "duration", "tracks": {name: [value per frame]}}.
     profile: a name, alias ("speech", "singing"), path, or an already loaded profile dict.
     words: optional [(start seconds, word), ...]; used instead of text when given.
-    mood: None, a preset name (neutral, scowl, warm, sad, surprised), a preset path or dict, or "auto" (a guess
-    from the voice)."""
+    mood: None, a preset name (neutral, calm, scowl, warm, sad, surprised), a preset path or dict, or "auto" (a guess
+    from the voice). speaker_pitch: the speaker's typical pitch (voice_pitch() of another line of theirs), so --mood
+    auto can use pitch relative to that voice."""
     cfg = profile if isinstance(profile, dict) else load_profile(profile)
     samples, rate = load_wav(wav_path)
     db = normalize(loudness_db(samples, rate), cfg["normalize_to_db"])
@@ -694,7 +743,7 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
         guessed = mood == "auto"
         score = None
         if guessed:
-            mood, score = estimate_mood(db, samples, rate, cfg)
+            mood, score = estimate_mood(db, samples, rate, cfg, speaker_pitch=speaker_pitch)
         preset = load_mood(mood)
         apply_mood(tracks, preset, n, (cfg.get("upper_face") or {}).get("blink_peak", 0.85))
         mood_info = {"name": preset.get("name", "custom"), "source": preset.get("source", "custom")}
@@ -728,6 +777,7 @@ if __name__ == "__main__":
     ap.add_argument("--words", help='JSON file of timed words, [[seconds, "word"], ...]; overrides --text')
     ap.add_argument("--profile", default="speech", help=f"one of {', '.join(profile_names())}, speech, singing, or a .json path")
     ap.add_argument("--mood", help=f"held expression: {', '.join(mood_names())}, a preset .json, or auto (a guess from the voice)")
+    ap.add_argument("--voice-ref", help="another recording of the same speaker: lets --mood auto judge pitch against their own voice")
     ap.add_argument("--export", choices=sorted(EXPORTERS), default="raw", help="track naming (default: raw rig names)")
     ap.add_argument("--out", help="write JSON here")
     ap.add_argument("--preview", action="store_true", help="print a bar chart")
@@ -736,7 +786,8 @@ if __name__ == "__main__":
     if a.words:
         with open(a.words, encoding="utf-8") as fh:
             words = [(float(t), str(w)) for t, w in json.load(fh)]
-    res = simulate_lipsync(a.wav, a.text, a.profile, words=words, mood=a.mood)
+    res = simulate_lipsync(a.wav, a.text, a.profile, words=words, mood=a.mood,
+                           speaker_pitch=voice_pitch(a.voice_ref) if a.voice_ref else None)
     if a.preview or not a.out:
         preview(res)
     res = EXPORTERS[a.export](res)

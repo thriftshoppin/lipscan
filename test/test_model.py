@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory() as tmp:
     fake_voice(wav)
 
     names = lipsync.profile_names()
-    check("both Cyberpunk profiles load", {"speech-cyberpunk", "singing-cyberpunk"} <= set(names), ", ".join(names))
+    check("the Cyberpunk profiles load", {"speech-cyberpunk", "speech-kerry", "singing-kerry"} <= set(names), ", ".join(names))
     sp = lipsync.load_profile("speech")
     check("aliases and dB tables load as numbers", sp["name"] == "speech-cyberpunk" and all(isinstance(k, float) for k in sp["jaw_mean"]))
 
