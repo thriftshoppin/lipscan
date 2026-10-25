@@ -3,7 +3,7 @@
 //   /pack/...   -> LIPSCAN_PACKS (character packs)
 //   /data/...   -> LIPSCAN_DATA (animations, audio)
 //   /api/gen    -> runs the LipScan model again with the sliders' settings (needs Python: LIPSCAN_PY, and the repo: LIPSCAN_REPO)
-//        ?mode=voice&wav=/pack/x.wav[&text=..][&profile=speech][&rig=/pack/c/character.json]&articulation=1&expressiveness=1&coupling=1
+//        ?mode=voice&wav=/pack/x.wav[&text=..][&words=/pack/x-words.json][&profile=speech][&rig=/pack/c/character.json]&articulation=1&expressiveness=1&coupling=1
 //        ?mode=hybrid&folder=/pack/live/clip/ ...the same settings  (a LipScan trace folder: the video's head and brows, the voice's mouth)
 import http from "node:http";
 import { execFile } from "node:child_process";
@@ -35,6 +35,8 @@ function gen(q, res) {
     if (!wav) return res.writeHead(400).end("bad wav");
     args = [join(repo, "model", "lipsync.py"), wav, "--out", "-", ...flags];
     if (q.get("text")) args.push("--text", q.get("text"));
+    const words = q.get("words") && local(q.get("words"));            // a JSON file of timed words, [[seconds, "word"], ...]
+    if (words) args.push("--words", words);
     if (q.get("profile")) args.push("--profile", String(q.get("profile")).replace(/[^\w.-]/g, ""));
   }
   execFile(py, args, { maxBuffer: 1 << 28, timeout: 120000 }, (err, out, errout) => {

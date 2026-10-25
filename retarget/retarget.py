@@ -225,6 +225,53 @@ def fill_lip_gap(tracks, gap, strength=1.0):
     return tracks
 
 
+CLOSE_SHUT, CLOSE_OPEN, CLOSE_MAXLEN, CLOSE_AROUND = 0.025, 0.045, 9, 8   # lip gap under SHUT, lips open (over OPEN) either side within AROUND frames
+CLOSE_HOLD = 3                                                          # frames: the game's presses are 133 ms wide, the shortest that reads
+
+
+def closures_from_gap(gap):
+    """The brief lip closures (b, p, m and the like) read from the video's own lip gap: the gap dips under 0.025 for 1-9 frames
+    with the lips open on both sides. A held-shut mouth (longer than 9 frames) is a posture, not a consonant, and is left to the
+    video's own tracks. Returns (press curve 0-1, per frame), or None when there is no gap. On one close-up song this finds 81
+    (0.4 a second, median 3 frames); the speech-to-text words for the sung b/p/m sounds were too loosely timed to find them
+    (within 6 frames of a real closure for 19% of them, against 18% at random times)."""
+    if gap is None:
+        return None
+    n = len(gap)
+    g = np.nan_to_num(gap, nan=1.0)
+    press = np.zeros(n)
+    i = 0
+    while i < n:
+        if g[i] < CLOSE_SHUT:
+            j = i
+            while j < n and g[j] < CLOSE_SHUT:
+                j += 1
+            before, after = g[max(0, i - CLOSE_AROUND):i], g[j:j + CLOSE_AROUND]
+            if 1 <= j - i <= CLOSE_MAXLEN and len(before) and len(after) and before.max() > CLOSE_OPEN and after.max() > CLOSE_OPEN:
+                a, b = i, j
+                if b - a < CLOSE_HOLD:                                       # widen about its centre to the shortest press that reads
+                    a -= (CLOSE_HOLD - (b - a)) // 2
+                    b = a + CLOSE_HOLD
+                press[max(0, a):min(n, b)] = 1.0
+            i = j
+        else:
+            i += 1
+    return press
+
+
+def apply_video_closures(tracks, gap, replace):
+    """Put the video's closures on lips_together_up/dn: replacing the voice's where the face is seen (replace=True: the voice's
+    come from words whose times are rough), or added to whatever is there. Frames with no face keep what they had."""
+    press = closures_from_gap(gap)
+    if press is None:
+        return tracks
+    seen = ~np.isnan(gap)
+    for k in ("lips_together_up", "lips_together_dn"):
+        cur = tracks.get(k, np.zeros(len(gap)))
+        tracks[k] = np.where(seen, press if replace else np.fmax(np.nan_to_num(cur), press), cur)
+    return tracks
+
+
 VIDEO_PURSE_MIN = 0.03       # below this (95th percentile) the video shows no pucker at all in this clip: the voice's stays
 VIDEO_PURSE_TARGET = 0.15    # a small face reads pucker weakly (0.06 where the true value was 0.32, correlation still 0.69): lift it to this
 VIDEO_PURSE_GAIN_MAX = 4.0
@@ -338,7 +385,7 @@ def jl(a, nd=4):
 
 
 def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True, size=True, mouth_from="auto",
-             articulation=None, expressiveness=None, coupling=1.0, jaw_presence=1.0, profile="speech", round_split=1.0, gap_fill=1.0):
+             articulation=None, expressiveness=None, coupling=1.0, jaw_presence=1.0, profile="speech", round_split=1.0, gap_fill=1.0, video_diction=True):
     folder = os.path.abspath(folder)
     perf = json.load(open(os.path.join(folder, "performance.json"), encoding="utf-8"))
     if perf.get("format") != "lipscan-performance/1":
@@ -377,6 +424,8 @@ def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hy
     elif tongue:
         for k, v in tongue_from_audio(folder, trace, n).items():
             tracks[k] = np.where(face_seen, v, np.nan)
+    if video_diction and mode in ("hybrid", "video") and video_mouth_trusted(chan["jawOpen"]) and "lipGap" in chan:
+        tracks = apply_video_closures(tracks, chan["lipGap"], replace=(mode == "hybrid"))      # diction from his own lips
     tracks = fill_lip_gap(tracks, chan.get("lipGap"), gap_fill)
     tracks = add_coupling(tracks, n, coupling, jaw_presence)
     base["settings"] = {"articulation": articulation, "expressiveness": expressiveness, "coupling": coupling, "jaw_presence": jaw_presence}
@@ -409,6 +458,8 @@ def main():
                     "instead of the closed purse as the lips part (0 = all to the purse, as mapped; default 1)")
     ap.add_argument("--gap-fill", type=float, default=1.0, help="open the head's lips where they are less parted than the video's measured lip gap "
                     "(0 = off, default 1)")
+    ap.add_argument("--no-video-diction", action="store_true", help="don't take the p/b/m closures from the video's lip gap when the video reads the mouth well "
+                    "(the voice model's word-placed closures are used)")
     ap.add_argument("--no-size", action="store_true", help="(hybrid) don't scale the voice's jaw and lips by the mouth size seen in the video")
     ap.add_argument("--video-only", action="store_true",
                     help="read the mouth from the video too. Default is a hybrid: jaw, lips, tongue and neck from the voice, "
@@ -418,7 +469,7 @@ def main():
     res = retarget(a.folder, a.mapping, a.export, not a.no_tongue, hybrid=not a.video_only, size=not a.no_size, mouth_from=a.mouth_from,
                    articulation=a.articulation, expressiveness=a.expressiveness, coupling=min(2.0, max(0.0, a.coupling)),
                    jaw_presence=min(1.3, max(0.7, a.jaw_presence if a.jaw_presence is not None else rig_presence(a.rig))), profile=a.profile,
-                   round_split=min(1.0, max(0.0, a.round_split)), gap_fill=min(1.0, max(0.0, a.gap_fill)))
+                   round_split=min(1.0, max(0.0, a.round_split)), gap_fill=min(1.0, max(0.0, a.gap_fill)), video_diction=not a.no_video_diction)
     if a.out == "-":
         json.dump(res, sys.stdout)
         return

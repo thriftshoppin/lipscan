@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.6 (2026-10-25)
+
+Diction from the singer's own lips.
+
+- **Found:** a song with no captions had no consonants at all in the hybrid (0 closures: "jaw, tongue and neck only"). Words from a local speech-to-text pass (Whisper small, timed per word; the sung b/p/m placed 77 closures) fixed that, but sung words are timed too loosely: the real lip gap was under 0.03 near 5% of those closures, and within 6 frames of a real closure for only 19% of the sung b/p/m words (random times: 18%). The word times cannot place a 2-frame closure.
+- **Fix:** when the video reads the mouth well (jaw 95th percentile of 0.3 or more), the closures come from the video's own lip gap: a dip under 0.025 for 1-9 frames, with the lips open either side, is a b/p/m-type press; widened to 3 frames (133 ms, the game's width). A mouth held shut longer than that is a posture and is left alone. In the hybrid they replace the word-placed closures wherever the face is seen (the voice's carry on where no face is seen); video-only gets them added. On the song: 81 closures (0.4 a second, median 3 frames) where the head had 0. `--no-video-diction` keeps the word-placed ones. A render at one closure shows the lips open, meet for two frames and open again, as the video's do.
+- **Words:** the voice model takes timed words (`captions.json` in a trace folder, or `--words`). The viewer's audio-only head now gets them too (`words` in a Test-set line). The tongue and the rounded sounds (oo, w, sh/ch) still follow the words' times, so they carry the same timing error.
+- **Tests:** 6 new checks (95 in test_performance.py).
+- **Limits:** the closure test above is by construction (the closures are read from the same gap). The tongue (k, g, t, d) has no video reading and rides on rough word times. The speech-to-text was a one-off scratch tool and is not in the repo; it hallucinated a run of "oh" over a quiet intro, which was removed.
+
 ## 0.3.5 (2026-10-25)
 
 The head's lips are parted wherever the video's are.

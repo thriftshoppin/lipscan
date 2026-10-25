@@ -895,7 +895,7 @@ async function loadDemo() {
       const ok = await fetch("/api/gen").then((r) => r.status !== 404, () => false);
       if (ok) {
         const base = { profile: l.profile || demo.profile || "speech" };
-        const jobs = { audio: { mode: "voice", wav: l.audio, ...(l.text && !l.noText ? { text: l.text } : {}), ...base } };
+        const jobs = { audio: { mode: "voice", wav: l.audio, ...(l.text && !l.noText ? { text: l.text } : {}), ...(l.words ? { words: l.words } : {}), ...base } };
         if (l.hybrid) jobs.hybrid = { mode: "hybrid", folder: l.hybrid, ...base };
         live = { jobs, line: l, slotKind: l.sources ? { A: "hybrid", B: "audio" } : (l.hybrid ? { A: "hybrid", B: "audio" } : { B: "audio" }),
                  rig: c.pack.replace(/\/?$/, "/") + "character.json", settings: null };

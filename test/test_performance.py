@@ -429,5 +429,29 @@ res = rt.fill_lip_gap({k: v.copy() for k, v in tr.items()}, nf)
 check("lip gap: frames with no face are left as they are", np.allclose(res["lips_apart_dn"][41:49], 0))
 check("lip gap: strength 0 leaves the tracks alone", np.allclose(rt.fill_lip_gap({k: v.copy() for k, v in tr.items()}, gap, 0.0)["lips_apart_dn"], 0))
 
+# ---- 0.3.6: diction closures read from the video's own lip gap ----
+n = 200
+gap = np.full(n, 0.10)
+gap[40:42] = 0.005                                 # a 2-frame closure with the lips open either side: a consonant
+gap[80:100] = 0.005                                # held shut for 20 frames: a posture
+gap[150:151] = 0.01                                # a 1-frame dip
+gap[0:3] = 0.005                                   # at the very start: nothing before it
+press = rt.closures_from_gap(gap)
+check("video closures: a brief closure with the lips open either side is a press, widened to 3 frames (133 ms)",
+      press[40] == 1 and press[41] == 1 and press[39:43].sum() >= 3 and press[38] == 0, f"{int(press.sum())} frames")
+check("video closures: a held-shut mouth is not a consonant", press[80:100].sum() == 0)
+check("video closures: a 1-frame dip counts, the start of the clip (nothing before it) does not", press[150] == 1 and press[0:3].sum() == 0)
+vg = gap.copy()
+vg[120:130] = np.nan
+voice = {"lips_together_up": np.zeros(n), "lips_together_dn": np.zeros(n)}
+voice["lips_together_up"][10:13] = 1.0             # the voice's word-placed closure, in the wrong place
+voice["lips_together_up"][125:128] = 1.0           # and one where no face is seen
+rep = rt.apply_video_closures({k: v.copy() for k, v in voice.items()}, vg, replace=True)
+check("video closures: in the hybrid they replace the word-placed ones where the face is seen; frames with no face keep the voice's",
+      rep["lips_together_up"][10:13].sum() == 0 and rep["lips_together_up"][40] == 1 and np.allclose(rep["lips_together_up"][125:128], 1.0))
+add_ = rt.apply_video_closures({k: v.copy() for k, v in voice.items()}, vg, replace=False)
+check("video closures: video-only adds them to whatever the mapping gave", add_["lips_together_up"][40] == 1 and add_["lips_together_up"][10:13].sum() == 3)
+check("video closures: no gap, no change", rt.apply_video_closures({"lips_together_up": np.zeros(5)}, None, True)["lips_together_up"].sum() == 0)
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

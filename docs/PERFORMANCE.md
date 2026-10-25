@@ -126,6 +126,8 @@ Rounded mouths: MediaPipe's `mouthPucker` goes to the rig's purse while the lip 
 
 Lip gap: where the head's lips are less parted than the video's measured lip gap, they open to match (`--gap-fill 0` to turn off). It never closes lips, and it leaves closures and frames with no face alone.
 
+Diction: when the video reads the mouth well, the p/b/m-type closures come from the video's own lip gap (brief dips with the lips open either side), replacing the word-placed ones where the face is seen; `--no-video-diction` turns it off. Sung words are timed too loosely to place a 2-frame closure.
+
 ## In the viewer
 
 The face viewer (built with `claude/skills/cyberpunk-face-viewer`) plays `retarget-cyberpunk.json` in slot A or B:
