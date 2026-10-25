@@ -221,6 +221,17 @@ with tempfile.TemporaryDirectory() as tmp:
     check("lips: purse and funnel never stack past what the game uses (0.6)", max(pf) <= 0.6 + 1e-6, f"max {max(pf):.2f}")
     jumps = [abs(b - a) for k, v in plain.items() if k.startswith("lips_") and "together" not in k for a, b in zip(v, v[1:])]
     check("lips: shapes other than p/b/m presses ease in and out (no pops over 0.25 per frame)", max(jumps) <= 0.25, f"max jump {max(jumps):.2f}")
+    # ---- 0.2.3: a tongue that behaves like the game's, soft lips, final smoothing ----
+    tg = plain.get("tongue_mid_base_up", [0])
+    talk_f = [f for f in range(len(tg)) if 0.35 * 30 <= f <= 0.8 * 30]
+    check("tongue: the body rests raised while talking (~0.4-0.6 in the game) and relaxes in pauses",
+          0.25 < sum(tg[f] for f in talk_f) / len(talk_f) < 0.8 and max(tg[int(1.2 * 30):int(1.45 * 30)]) < 0.1,
+          f"talking {sum(tg[f] for f in talk_f) / len(talk_f):.2f}")
+    check("tongue: the tip barely goes up (the game's almost never does)", max(plain.get("tongue_mid_tip_up", [0])) < 0.1)
+    check("tongue: it doesn't follow the jaw open (that was the old, unnatural rule)",
+          "tongue_mid_base_up" not in lipsync.load_profile("speech")["follow_jaw"])
+    press = plain["lips_together_up"]
+    check("smoothing: p/b/m presses stay crisp (still reach the cap)", max(press) > 0.9, f"{max(press):.2f}")
     check("profiles: speech-kerry (one voice) and speech-cyberpunk (six characters) both load",
           lipsync.load_profile("speech-kerry")["name"] == "speech-kerry" and lipsync.load_profile("speech")["name"] == "speech-cyberpunk")
 

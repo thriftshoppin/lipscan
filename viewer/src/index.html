@@ -106,6 +106,7 @@
     <div class="row"><select id="mood" title="A held expression added to LipScan clips (game clips carry their own)" style="max-width:100%"></select></div>
     <div class="row"><label><input type="checkbox" id="moodA"> A</label><label><input type="checkbox" id="moodB" checked> B</label><input id="fMood" type="file" accept=".json" hidden></div>
     <div id="moodInfo" style="color:var(--muted);font-size:11.5px"></div>
+    <div class="row" style="color:var(--muted);font-size:11.5px">View keys: A/D turn · W/S tilt · Q/E zoom · 1 front · 2 ¾ · 3/4 profiles · 0 reset (Shift = bigger steps)</div>
     <h2>Audio</h2>
     <div class="row">Offset <input type="number" id="offset" value="0" step="10"> ms</div>
     <h2>Try a pose</h2>
@@ -119,7 +120,7 @@
 <footer>
   <button id="play" title="Space">Play</button>
   <div id="time">0.00 / 0.00 s</div>
-  <canvas id="timeline" title="Click or drag to seek. Arrow keys step one frame."></canvas>
+  <canvas id="timeline" title="Click or drag to seek. Arrow keys step one frame. View: drag to turn, scroll to zoom; keys A/D turn, W/S tilt, Q/E zoom, 1 front, 2 three-quarter, 3/4 profiles, 0 reset."></canvas>
   <div class="opts row">
     <select id="speed" title="Speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option></select>
     <label><input type="checkbox" id="loop" checked> Loop</label>

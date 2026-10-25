@@ -621,6 +621,43 @@ $("frontCam").addEventListener("change", () => {
   const t = controls.target;
   camera.position.set(t.x, t.y, t.z - 0.85);
 });
+
+// Camera keys (the view can also be dragged and scrolled): A/D turn around the heads, W/S tilt, Q/E zoom,
+// 1 front, 2 three-quarter, 3 left profile, 4 right profile, 0 the starting view.
+function orbit(yawDeg, pitchDeg, zoom = 1) {
+  const t = controls.target;
+  const off = camera.position.clone().sub(t);
+  const sph = new THREE.Spherical().setFromVector3(off);
+  sph.theta += THREE.MathUtils.degToRad(yawDeg);
+  sph.phi = Math.min(Math.PI - 0.1, Math.max(0.1, sph.phi - THREE.MathUtils.degToRad(pitchDeg)));
+  sph.radius = Math.min(4, Math.max(0.2, sph.radius * zoom));
+  camera.position.copy(t).add(new THREE.Vector3().setFromSpherical(sph));
+  camera.lookAt(t);
+}
+function viewFrom(deg, dist = 0.85) { // deg: 0 = front, 90 = the character's left, -90 = their right
+  const t = controls.target;
+  const r = THREE.MathUtils.degToRad(deg);
+  camera.position.set(t.x - Math.sin(r) * dist, t.y + 0.02, t.z - Math.cos(r) * dist);
+  camera.lookAt(t);
+}
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  const step = e.shiftKey ? 45 : 15;
+  if (k === "a") orbit(-step, 0);
+  else if (k === "d") orbit(step, 0);
+  else if (k === "w") orbit(0, step / 2);
+  else if (k === "s") orbit(0, -step / 2);
+  else if (k === "q") orbit(0, 0, 0.85);
+  else if (k === "e") orbit(0, 0, 1 / 0.85);
+  else if (k === "1") viewFrom(0);
+  else if (k === "2") viewFrom(35);
+  else if (k === "3") viewFrom(90, 1.0);
+  else if (k === "4") viewFrom(-90, 1.0);
+  else if (k === "0") { const t = controls.target; camera.position.set(t.x - 0.2, t.y + 0.02, t.z - 0.85); camera.lookAt(t); }
+  else return;
+  $("frontCam").checked = k === "1";
+});
 $("offset").addEventListener("input", (e) => { state.offset = (+e.target.value || 0) / 1000; seek(state.t); });
 state.tryTrack = -1;
 state.tryValue = 0;

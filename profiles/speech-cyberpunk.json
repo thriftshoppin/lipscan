@@ -23,7 +23,12 @@
     "mood_auto": "--mood auto: a guess from the voice. score = (pitch - pitch_ref)/pitch_scale + (loudness - loud_ref)/loud_scale - (pitch range - range_ref)/range_scale; above threshold -> intense, else calm",
     "neck_during_speech": "neck/throat tracks held at the game's average level while talking (they don't follow jaw, loudness or pitch in the game data)",
     "soft_attack_ms": "lip and tongue shapes other than p/b/m presses ease in (ms); the game's change no faster than this",
-    "soft_release_ms": "and ease out"
+    "soft_release_ms": "and ease out",
+    "tongue_contrast": "how much the tongue's per-sound shapes are exaggerated over the game's averages (which timing blurs)",
+    "lip_mode": "learned: soft lip shapes learned from the game that blend from sound to sound (p/b/m and f/v stay crisp); shapes: one fixed shape per sound (0.2.x)",
+    "lip_contrast": "how much the learned lip shapes are exaggerated over the game's averages",
+    "face_smooth_ms": "a final, slight zero-phase smoothing over the whole face (blinks and p/b/m presses stay crisp); 0 = off",
+    "head_smooth_ms": "the same for head motion"
   },
   "jaw_mean": {
     "-60": 0.027,
@@ -61,8 +66,7 @@
     "lips_l_corner_up": 0.42,
     "lips_r_corner_up": 0.42,
     "lips_l_lower_raise": 0.22,
-    "lips_r_lower_raise": 0.22,
-    "tongue_mid_base_up": 1.4
+    "lips_r_lower_raise": 0.22
   },
   "viseme_strength": 1.0,
   "shape_lead_ms": 100,
@@ -156,5 +160,10 @@
     "takemura": {
       "lines": 11
     }
-  }
+  },
+  "tongue_contrast": 1.5,
+  "lip_mode": "learned",
+  "lip_contrast": 2.5,
+  "face_smooth_ms": 50,
+  "head_smooth_ms": 120
 }

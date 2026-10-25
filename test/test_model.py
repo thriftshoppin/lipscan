@@ -68,7 +68,9 @@ with tempfile.TemporaryDirectory() as tmp:
     shut = timed.get("lips_together_up", [0] * len(jaw))
     first_shut = next((f for f, v in enumerate(shut) if v > 0.3), None)
     check("timed words: the 'm' of 'maybe' closes the lips near 0.28 s", first_shut is not None and abs(first_shut / 30 - 0.28) < 0.2, f"frame {first_shut}")
-    check("timed words: 'you' and 'should' purse the lips", max(timed.get("lips_l_purse", [0])) > 0.3)
+    purse = timed.get("lips_l_purse", [0] * len(jaw))
+    check("timed words: 'you' and 'should' purse the lips (well above 'maybe')", max(purse[18:]) > 0.15 and max(purse[18:]) > 2 * max(purse[:15]),
+          f"{max(purse[18:]):.2f} vs {max(purse[:15]):.2f}")
 
     texted = lipsync.simulate_lipsync(wav, text="maybe you should")["tracks"]
     check("plain text also gives diction", max(texted.get("lips_together_up", [0])) > 0.3)

@@ -167,7 +167,7 @@ The game's face clips contain no head turns, so the model's head motion has no g
 | Part | State |
 |---|---|
 | Model, profiles, exporters | Working. 12 checks in `test/test_model.py`. |
-| Whole-face capture, clean-up, retarget, voice-driven upper face | Working. 36 checks in `test/test_performance.py`. Head angles and left/right checked on renders of a game head. |
+| Whole-face capture, clean-up, retarget, voice-driven upper face | Working. 48 checks in `test/test_performance.py`. Head angles and left/right checked on renders of a game head. |
 | Capture server and add-on login | Working. 28 checks in `test/selftest.mjs` against a fake add-on. |
 | Live capture on YouTube | Built, first live run pending |
 | Analysis | Runs end to end; scoring on real faces pending the first live capture |

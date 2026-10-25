@@ -74,13 +74,13 @@ VISEMES = {
     "OO":  {"lips_l_purse": 0.53, "lips_r_purse": 0.53},
     "W":   {"lips_l_purse": 0.53, "lips_r_purse": 0.53},
     "O":   {"lips_l_funnel": 0.35, "lips_r_funnel": 0.35},
-    "CH":  {"lips_l_funnel": 0.35, "lips_r_funnel": 0.35, "tongue_mid_base_up": 1.0},   # sh ch j
-    "TD":  {"tongue_mid_tip_up": 0.32, "tongue_mid_lift": 0.5},               # t d n
-    "L":   {"tongue_mid_lift": 1.0, "tongue_mid_tip_up": 0.32},
-    "TH":  {"tongue_mid_base_fwd": 0.5, "tongue_mid_tip_dn": 0.31},
-    "S":   {"lips_l_stretch": 0.31, "lips_r_stretch": 0.31, "tongue_mid_base_up": 0.7},
-    "K":   {"tongue_mid_base_back": 1.0, "tongue_mid_base_up": 0.6},                      # k g ng
-    "R":   {"lips_l_purse": 0.3, "lips_r_purse": 0.3, "tongue_mid_lift": 0.5},
+    "CH":  {"lips_l_funnel": 0.35, "lips_r_funnel": 0.35},                   # sh ch j
+    "TD":  {},                                                                # t d n (tongue: see TONGUE_BY_VISEME)
+    "L":   {},
+    "TH":  {},
+    "S":   {"lips_l_stretch": 0.31, "lips_r_stretch": 0.31},
+    "K":   {},                                                                # k g ng
+    "R":   {"lips_l_purse": 0.3, "lips_r_purse": 0.3},
     "EE":  {"lips_l_pull": 0.37, "lips_r_pull": 0.37, "lips_l_corner_stretch": 0.32, "lips_r_corner_stretch": 0.32},
     "EH":  {"lips_l_pull": 0.2, "lips_r_pull": 0.2},
     "Y":   {"lips_l_pull": 0.3, "lips_r_pull": 0.3},                                      # y glide (consonant)
@@ -88,6 +88,60 @@ VISEMES = {
     "UH":  {},
     "H":   {},
 }
+# TONGUE: what the game's tongue does during each sound, learned from the dialogue lipsync of six Cyberpunk 2077
+# characters (140 lines; averages, numbers only). The tongue body stays raised through speech (~0.45), rises further on
+# t d n l th r y, the back rises on k g h (and f v ch), the front lifts on "o", and the tip barely moves. "_voiced" is
+# speech with no sound placed. Tracks are tongue_mid_<name>. TONGUE_CONTRAST (profile "tongue_contrast") restores the
+# contrast that averaging over imperfectly timed sounds blurs.
+TONGUE_BY_VISEME = {
+    "BMP":     {"base_up": 0.41, "base_back": 0.17, "lift": 0.12, "tip_dn": 0.09},
+    "FV":      {"base_up": 0.36, "base_back": 0.41, "lift": 0.16, "tip_dn": 0.07, "base_fwd": 0.02},
+    "OO":      {"base_up": 0.44, "base_back": 0.21, "lift": 0.12, "tip_dn": 0.06, "base_fwd": 0.02},
+    "W":       {"base_up": 0.39, "base_back": 0.12, "lift": 0.17, "tip_dn": 0.09},
+    "O":       {"base_up": 0.44, "base_back": 0.16, "lift": 0.30, "tip_dn": 0.05, "base_fwd": 0.02, "tip_up": 0.03},
+    "CH":      {"base_up": 0.27, "base_back": 0.34, "lift": 0.16, "tip_dn": 0.10, "base_fwd": 0.05},
+    "TD":      {"base_up": 0.60, "base_back": 0.16, "lift": 0.10, "tip_dn": 0.07, "base_fwd": 0.02},
+    "L":       {"base_up": 0.58, "base_back": 0.21, "lift": 0.06, "tip_dn": 0.08},
+    "TH":      {"base_up": 0.62, "base_back": 0.25, "lift": 0.09, "tip_dn": 0.10, "base_fwd": 0.03},
+    "S":       {"base_up": 0.39, "base_back": 0.21, "lift": 0.09, "tip_dn": 0.08, "base_fwd": 0.09},
+    "K":       {"base_up": 0.46, "base_back": 0.45, "lift": 0.18, "tip_dn": 0.07},
+    "R":       {"base_up": 0.58, "base_back": 0.20, "lift": 0.08, "tip_dn": 0.09, "base_fwd": 0.02},
+    "EE":      {"base_up": 0.48, "base_back": 0.20, "lift": 0.08, "tip_dn": 0.13, "base_fwd": 0.03},
+    "EH":      {"base_up": 0.49, "base_back": 0.21, "lift": 0.05, "tip_dn": 0.12, "base_fwd": 0.03},
+    "Y":       {"base_up": 0.58, "base_back": 0.14, "lift": 0.09, "tip_dn": 0.04},
+    "AA":      {"base_up": 0.45, "base_back": 0.21, "lift": 0.17, "tip_dn": 0.08, "base_fwd": 0.02},
+    "UH":      {"base_up": 0.49, "base_back": 0.22, "lift": 0.16, "tip_dn": 0.09, "base_fwd": 0.02},
+    "H":       {"base_up": 0.30, "base_back": 0.45, "lift": 0.16, "tip_dn": 0.07},
+    "_voiced": {"base_up": 0.40, "base_back": 0.20, "lift": 0.10, "tip_dn": 0.06, "base_fwd": 0.03},
+}
+
+# LIPS: the game's lip shapes during each sound (both sides alike), learned like the tongue from six characters'
+# dialogue lipsync. Unlike VISEMES (one fixed shape per sound, at full strength), these are soft mixes that blend
+# from sound to sound, which is how the game's speech looks. Keys are lips_<name> or, for sided shapes,
+# lips_l_<name> and lips_r_<name>. p/b/m presses still come from VISEMES (sharp peaks).
+SIDED = {"lower_raise", "purse", "funnel", "stretch", "corner_stretch", "pull", "corner_up", "corner_dn", "upper_raise", "corner_wide"}
+LIPS_BY_VISEME = {
+    "BMP":     {"suck_dn": 0.063, "suck_up": 0.048, "lower_raise": 0.043, "purse": 0.065, "stretch": 0.043, "corner_stretch": 0.053, "pull": 0.061, "corner_up": 0.090, "corner_dn": 0.043, "chin_raise": 0.044, "puff_up": 0.035},
+    "FV":      {"suck_dn": 0.142, "lower_raise": 0.046, "purse": 0.035, "stretch": 0.046, "corner_stretch": 0.057, "pull": 0.064, "corner_up": 0.096, "corner_dn": 0.046, "upper_raise": 0.024, "chin_raise": 0.033},
+    "OO":      {"suck_dn": 0.024, "lower_raise": 0.036, "purse": 0.120, "stretch": 0.036, "corner_stretch": 0.047, "pull": 0.058, "corner_up": 0.088, "corner_dn": 0.036},
+    "W":       {"lower_raise": 0.049, "purse": 0.135, "stretch": 0.049, "corner_stretch": 0.060, "pull": 0.072, "corner_up": 0.103, "corner_dn": 0.049},
+    "O":       {"suck_dn": 0.023, "lower_raise": 0.037, "purse": 0.084, "stretch": 0.037, "corner_stretch": 0.047, "pull": 0.051, "corner_up": 0.077, "corner_dn": 0.037},
+    "CH":      {"suck_dn": 0.040, "lower_raise": 0.036, "purse": 0.036, "funnel": 0.111, "stretch": 0.036, "corner_stretch": 0.043, "pull": 0.051, "corner_up": 0.075, "corner_dn": 0.036},
+    "TD":      {"suck_dn": 0.025, "lower_raise": 0.049, "purse": 0.052, "stretch": 0.049, "corner_stretch": 0.061, "pull": 0.064, "corner_up": 0.100, "corner_dn": 0.049},
+    "L":       {"suck_dn": 0.029, "lower_raise": 0.046, "purse": 0.054, "stretch": 0.046, "corner_stretch": 0.055, "pull": 0.064, "corner_up": 0.101, "corner_dn": 0.046},
+    "TH":      {"suck_dn": 0.054, "lower_raise": 0.072, "purse": 0.031, "stretch": 0.072, "corner_stretch": 0.079, "pull": 0.072, "corner_up": 0.113, "corner_dn": 0.072},
+    "S":       {"suck_dn": 0.031, "lower_raise": 0.074, "purse": 0.045, "stretch": 0.074, "corner_stretch": 0.099, "pull": 0.105, "corner_up": 0.159, "corner_dn": 0.074},
+    "K":       {"suck_dn": 0.020, "lower_raise": 0.055, "purse": 0.046, "stretch": 0.055, "corner_stretch": 0.066, "pull": 0.065, "corner_up": 0.103, "corner_dn": 0.055},
+    "R":       {"suck_dn": 0.048, "lower_raise": 0.049, "purse": 0.036, "stretch": 0.049, "corner_stretch": 0.059, "pull": 0.071, "corner_up": 0.106, "corner_dn": 0.049},
+    "EE":      {"suck_dn": 0.037, "lower_raise": 0.064, "purse": 0.038, "stretch": 0.063, "corner_stretch": 0.073, "pull": 0.088, "corner_up": 0.139, "corner_dn": 0.063},
+    "EH":      {"suck_dn": 0.034, "lower_raise": 0.078, "purse": 0.033, "stretch": 0.078, "corner_stretch": 0.094, "pull": 0.102, "corner_up": 0.151, "corner_dn": 0.078},
+    "Y":       {"suck_dn": 0.031, "lower_raise": 0.050, "purse": 0.096, "stretch": 0.050, "corner_stretch": 0.070, "pull": 0.072, "corner_up": 0.112, "corner_dn": 0.050},
+    "AA":      {"suck_dn": 0.032, "lower_raise": 0.050, "purse": 0.045, "stretch": 0.050, "corner_stretch": 0.065, "pull": 0.064, "corner_up": 0.099, "corner_dn": 0.050},
+    "UH":      {"suck_dn": 0.042, "lower_raise": 0.052, "purse": 0.039, "stretch": 0.052, "corner_stretch": 0.063, "pull": 0.069, "corner_up": 0.104, "corner_dn": 0.052},
+    "H":       {"lower_raise": 0.040, "purse": 0.068, "stretch": 0.040, "corner_stretch": 0.049, "pull": 0.073, "corner_up": 0.111, "corner_dn": 0.040},
+    "_voiced": {"suck_dn": 0.034, "lower_raise": 0.046, "purse": 0.041, "stretch": 0.045, "corner_stretch": 0.057, "pull": 0.062, "corner_up": 0.095, "corner_dn": 0.045},
+}
+
 VOWELS = {"OO", "O", "EE", "EH", "AA", "UH"}
 CONS_FRAMES = 3   # about how long one consonant lasts (frames at 30 fps)
 
@@ -349,7 +403,74 @@ def place_timed_words(words, db, fps=FPS, voiced_db=-45, longest=1.0):
     return placed
 
 
+def tongue_tracks(placed, n, speaking, cfg, fps=FPS):
+    """The tongue from the placed sounds (TONGUE_BY_VISEME): a steady raised body through speech, shaped by each
+    sound, eased in and out, at rest in silence."""
+    return learned_tracks(TONGUE_BY_VISEME, lambda k: [f"tongue_mid_{k}"], placed, n, speaking, cfg,
+                          cfg.get("tongue_contrast", 1.5), cfg.get("tongue_attack_ms", 80), cfg.get("tongue_release_ms", 120), fps)
+
+
+def lip_tracks(placed, n, speaking, cfg, fps=FPS):
+    """Soft lip shapes from the placed sounds (LIPS_BY_VISEME), blending from sound to sound."""
+    names = lambda k: [f"lips_l_{k}", f"lips_r_{k}"] if k in SIDED else [f"lips_{k}"]
+    return learned_tracks(LIPS_BY_VISEME, names, placed, n, speaking, cfg,
+                          cfg.get("lip_contrast", 2.5), cfg.get("soft_attack_ms", 100), cfg.get("soft_release_ms", 130), fps)
+
+
+def learned_tracks(table, track_names, placed, n, speaking, cfg, contrast, attack_ms, release_ms, fps=FPS):
+    """Per frame, the table row of the sound placed there ("_voiced" between sounds, rest in silence), pushed away
+    from the speech average by `contrast` (averages over imperfectly timed sounds are blurred), then eased."""
+    names = sorted({k for t in table.values() for k in t})
+    centre = {k: table["_voiced"].get(k, 0.0) for k in names}
+    at = [None] * n
+    for vis, start, end in placed:
+        for f in range(max(0, start), min(n, end + 1)):
+            at[f] = vis
+    lead = round(cfg["shape_lead_ms"] * fps / 1000)
+    raw = {k: [0.0] * n for k in names}
+    for f in range(n):
+        src = min(n - 1, f + lead)                       # like the lips, the tongue moves a little ahead of the sound
+        if not speaking[src]:
+            continue
+        row = table.get(at[src] or "_voiced", table["_voiced"])
+        for k in names:
+            v = row.get(k, 0.0)
+            raw[k][f] = max(0.0, min(1.0, centre[k] + contrast * (v - centre[k])))
+    slow = dict(cfg, attack_ms=attack_ms, release_ms=release_ms, max_open_speed=99, max_close_speed=99)
+    out = {}
+    for k, v in raw.items():
+        if max(v) > 0.01:
+            sm = smooth(v, slow, fps)
+            for name in track_names(k):
+                out[name] = sm
+    return out
+
+
+def gentle(values, sigma_frames):
+    """Zero-phase Gaussian smoothing (no lag): takes the hard edges off without moving anything in time."""
+    if sigma_frames <= 0.05 or len(values) < 3:
+        return list(values)
+    r = max(1, int(round(3 * sigma_frames)))
+    w = [math.exp(-0.5 * (k / sigma_frames) ** 2) for k in range(-r, r + 1)]
+    n = len(values)
+    out = []
+    for f in range(n):
+        acc = tot = 0.0
+        for k, wk in zip(range(-r, r + 1), w):
+            g = f + k
+            if 0 <= g < n:
+                acc += wk * values[g]
+                tot += wk
+        out.append(acc / tot)
+    return out
+
+
+# Kept crisp by the final smoothing: blinks and p/b/m presses are sharp in the game too.
+CRISP = ("eye_l_blink", "eye_r_blink", "lips_together_up", "lips_together_dn")
+
+
 CLOSURE = ("lips_together_up", "lips_together_dn")
+SHARP_LIPS = ("lips_suck_dn",)   # with lip_mode "learned", these still come from VISEMES (crisp f/v)
 LIP_FORWARD_MAX = 0.6   # purse + funnel together; the game's largest is 0.62 (99th percentile 0.42)
 
 
@@ -708,6 +829,20 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
         quiet = [not any(loud[max(0, f - 2):f + 3]) for f in range(n)]
         tracks, jaw_scale = diction_tracks(placed, n, cfg, quiet=quiet)
         jaw = [min(1.0, j * s) for j, s in zip(jaw, jaw_scale)]
+        tracks.update(tongue_tracks(placed, n, loud, cfg))
+        if cfg.get("lip_mode") == "learned":              # soft, blended lips; p/b/m presses stay sharp
+            sharp = {k: tracks[k] for k in SHARP_LIPS if k in tracks}   # f/v tuck stays a crisp shape too
+            for k in [k for k in tracks if k.startswith("lips_") and k not in CLOSURE]:
+                del tracks[k]
+            soft = lip_tracks(placed, n, loud, cfg)
+            for k, v in sharp.items():
+                soft[k] = [max(x, y) for x, y in zip(soft.get(k, [0.0] * n), v)]
+            press = [max(tracks.get(k, [0.0] * n)[f] for k in CLOSURE) for f in range(n)]
+            for k, v in soft.items():
+                tracks[k] = [x * (1 - min(1.0, p)) for x, p in zip(v, press)]
+    else:                                                # no words: the tongue's resting speech posture only
+        loud = [d > cfg["normalize_to_db"] - 30 for d in db]
+        tracks.update(tongue_tracks([], n, loud, cfg))
     tracks["jaw_mid_open"] = jaw
     for name, gain in cfg["follow_jaw"].items():
         base = tracks.get(name, [0.0] * n)
@@ -749,6 +884,13 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
         mood_info = {"name": preset.get("name", "custom"), "source": preset.get("source", "custom")}
         if guessed:
             mood_info.update(auto=True, score=score, note="guessed from the voice; set --mood by hand when you know it")
+    # a final, slight smoothing of the whole face (and more of the head), so motion reads as one face, not a set of
+    # separate shapes
+    face_sigma = cfg.get("face_smooth_ms", 40) * FPS / 1000
+    tracks = {k: (v if k in CRISP else gentle(v, face_sigma)) for k, v in tracks.items()}
+    if head:
+        head_sigma = cfg.get("head_smooth_ms", 120) * FPS / 1000
+        head = {k: gentle(v, head_sigma) for k, v in head.items()}
     out = {"fps": FPS, "profile": cfg.get("name", "custom"), "duration": n / FPS,
            "tracks": {k: [round(v, 4) for v in vals] for k, vals in sorted(tracks.items())}}
     if head:

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.3 (2026-10-25)
+
+A tongue that moves like a tongue, and lips that aren't rigid.
+
+- **Tongue, learned from the game:** from six characters' dialogue lipsync (140 lines).
+  - **The game's tongue:** its body rests raised through speech (about 0.45) and rises further on t, d, n, l, th, r and y. Its back rises on k, g and h, its front lifts on "o", and the tip almost never goes up.
+  - **The old tongue:** it rose with the jaw opening (×1.4), fired a full lift on l, and pointed the tip up on t, d and l.
+  - **Correlation with the game,** each character scored with a table learned from the other five: body 0.38 → 0.57, lift 0.09 → 0.37, tip down 0.14 → 0.57, forward 0.03 → 0.35. Tip-up error 0.055 → 0.005.
+- **Lips, learned and blended** (`lip_mode: learned`, the default): each sound's lip shapes are the game's own soft mixes, blending from sound to sound, instead of one fixed shape at full strength.
+  - **The old "s":** stretched the lips at 0.31, about four times the game's level. The game's "s" is a soft pulled-back near-smile.
+  - **p/b/m presses and the f/v tuck stay crisp.**
+  - **Correlation,** leave-one-character-out: funnel 0.19 → 0.47, corners up 0.44 → 0.58, pull 0.38 → 0.57, stretch 0.25 → 0.50, lower lip 0.24 → 0.46. Purse and the f/v tuck are unchanged.
+  - **Frame-to-frame jumps:** halved, then halved again by the smoothing.
+- **Facial smoothing:** a slight, zero-phase (no lag) smoothing over the whole face, 50 ms (`face_smooth_ms`), and 120 ms on head motion (`head_smooth_ms`). Blinks and p/b/m presses stay crisp. It also raised every lip correlation a little.
+- **Viewer:** camera keys. A/D turn around the heads, W/S tilt, Q/E zoom, 1 front, 2 three-quarter, 3/4 the two profiles, 0 reset (Shift = bigger steps).
+- **Scores across six characters:** jaw corr 0.75–0.82, p/b/m hits 47–82%, blink hits 33–68%. No regressions.
+- **Tests:** 48 checks in test_performance.py.
+
 ## 0.2.2 (2026-10-25)
 
 Brows that map properly, polish, and a test across characters.

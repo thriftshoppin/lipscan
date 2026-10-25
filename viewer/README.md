@@ -68,6 +68,7 @@ Not included yet: skin tones, textures, makeup, scars, tattoos, hair, beards (th
 - **Head motion:** switch it on or off. It comes from LipScan curve files; the game's face clips have no head turns.
 - **Mood:** a held expression (neutral, scowl, warm, sad, surprised, or a custom preset JSON) added to LipScan clips in A and/or B. The game's clips carry their own mood.
 - **Video pane:** shows the source frames in sync when a trace folder is loaded.
+- **View keys** (as well as dragging and scrolling): A/D turn around the heads, W/S tilt, Q/E zoom, 1 front, 2 three-quarter, 3/4 the two profiles, 0 reset. Shift takes bigger steps.
 
 **A test set to step through.** Serve a manifest and open `?demo=/pack/demo/manifest.json`. The viewer then shows a **Test set** panel:
 - **Character** and **Line** menus, plus **Prev** and **Next** buttons

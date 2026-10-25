@@ -198,6 +198,37 @@ Kerry's own fit is kept as `speech-kerry`, and the singing profile is now `singi
 - Brow timing within a line is still weak for everyone (an actor's choice the audio doesn't show).
 - Singing is measured on one character only.
 
+## The tongue and the soft lips (0.2.3)
+
+**The tongue.** Averaged over 140 lines of six characters' game lipsync, by the sound being spoken:
+- **The body** (`tongue_mid_base_up`) rests at about 0.45 through all speech and 0.1 in silence, rising to about 0.6 on t, d, n, l, th, r and y. It does NOT follow the jaw.
+- **The back** rises on k, g and h (about 0.45, also f/v and ch).
+- **The front lift** is used mostly on "o" (0.3).
+- **The tip** goes up almost never (mean 0.01), and dips slightly on "ee" and "eh".
+
+These averages are now the model's tongue (`TONGUE_BY_VISEME`, contrast 1.5).
+
+**The lips.** The game's lip shapes per sound are soft mixes. Its "s", for example, has corners up 0.16, pull 0.10 and stretch 0.07, where the old model used one stretch at 0.31. These mixes are now the model's lips (`LIPS_BY_VISEME`, contrast 2.5), blending from sound to sound. p/b/m presses and the f/v tuck stay crisp shapes.
+
+Correlation with the game, each character scored with tables learned from the other five:
+
+| Track | 0.2.2 | 0.2.3 |
+|---|---|---|
+| tongue body | 0.38 | 0.57 |
+| tongue back | 0.31 | 0.35 |
+| tongue lift | 0.09 | 0.37 |
+| tongue tip down | 0.14 | 0.57 |
+| lips funnel | 0.19 | 0.47 |
+| lips corners up | 0.44 | 0.58 |
+| lips pull | 0.38 | 0.57 |
+| lips stretch | 0.25 | 0.50 |
+| lower lip raise | 0.24 | 0.46 |
+| purse | 0.37 | 0.40 |
+| f/v tuck | 0.39 | 0.39 |
+| frame-to-frame jump (99th pct) | 0.10 | 0.03 |
+
+The final 50 ms smoothing is included in the 0.2.3 column. Without it, the lips score about 0.02 lower.
+
 ## How well the voice-driven upper face matches
 
 Same clips; the model hears only the audio. "Hit" = a model blink starting within 0.3 s of the game's. "By chance" is what blinks at the same rate, placed at random, would score.

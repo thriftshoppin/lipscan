@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "LipScan",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Developer tool: records a YouTube video's frames, sound and captions to a local program for lipsync analysis. Talks only to 127.0.0.1.",
   "browser_specific_settings": {
     "gecko": {
