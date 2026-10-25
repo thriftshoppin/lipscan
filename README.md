@@ -131,6 +131,7 @@ Those rules became a model. To check them against real people rather than one ga
   - `--articulation`: how high and how fast plosives, f/v and oo/w go. 1.0 matches the game's press width (133 ms). Try 1.3 to 1.5 for a clipped voice or a deliberate delivery, 0.6 to 0.8 for mumbling. `speech-crisp` is 1.5.
   - `--expressiveness`: scales the brow raises, frown, squint and nods. `speech-expressive` and `singing-expressive` also tie them to pitch rise and tension; the other profiles don't.
   - `--coupling` and `--jaw-presence` (or `--rig`): see docs/MEASUREMENTS.md.
+  - Lips push forward on oo, w, o and sh/ch (profile key `lip_forward`, scaled by articulation). `analyze.py "<folder>" --forward` compares that with the video.
   - A profile can set its own defaults (`"articulation"`, `"expressiveness"`, `"coupling"`); the command line wins. `retarget.py` takes the same flags for the hybrid. `analyze.py "<folder>" --sweep` tries values against a real face.
   - In the viewer's Test set, three sliders re-run the model live next to the original (dev server only).
 

@@ -303,6 +303,26 @@ On a rendered clip with known mouth values (so the truth is exact): jaw 0.69 -> 
 
 **Settings sweep on a real face** (`analyze.py --sweep`; the 30 s recording above, voice only, no captions). Mouth correlation with the real face by articulation 0 / 0.5 / 1 / 1.5 / 2: 0.249 / 0.252 / 0.254 / 0.256 / 0.257; purse 0.41 to 0.44. The jaw stays at 0.41 (the model's jaw is 2.6 times the video's, which reads small). Upper face, expressiveness 0 / 0.5 / 1 / 1.5 / 2: mean correlation 0.079 / -0.059 / -0.045 / -0.027 / -0.021 (the model's brows do not follow this actor's, and with expressiveness 0 there are none to compare, so that 0.079 is the cheek alone). Coupling changes nothing measurable (the real cheek reading is 0.08). **Reading:** this clip cannot choose a best value. It is an acted skit with no captions, and the upper face of a person performing a character is not set by the pitch of their voice. The recommended values stay at 1.0 for speech; for singing the only reference is the game's concert capture, whose best measured setting is `prosody_raise` 0.3 at expressiveness 1.0.
 
+## Lips pushed forward (0.3.1)
+
+Same setup as above: six game characters, 140 lines, each held out of its own fit, voice model given the text; "hit" is a model peak within 3 or 8 frames of a game peak; game peaks above 0.2 (purse, funnel), model peaks above 0.1. The 61% purse figure quoted earlier came from a harness I no longer have; on the saved harness the default before this change scored 67% within 8 frames, and that is the number below.
+
+| | Game | Before | After |
+|---|---|---|---|
+| Purse, 95th / 99th percentile | 0.20 / 0.32 | 0.13 / 0.18 | **0.21 / 0.26** |
+| Purse hits within 3 / 8 frames | | 40% / 67% | **53% / 82%** |
+| Purse false (model peaks with no game peak within 8) | | 41% | 47% |
+| Purse correlation | | 0.415 | 0.431 |
+| Funnel, 99th percentile | 0.18 | 0.04 | **0.17** |
+| Funnel events (game 39) | | 4 | 46 |
+| Funnel hits within 3 / 8 frames | | 5% / 5% | **51% / 72%** |
+| Funnel correlation | | 0.44 | 0.48 |
+| Jaw correlation, p/b/m hits (8 frames), f/v hits (8 frames) | | 0.746, 82%, 71% | unchanged to the digit |
+
+What the game does: of its rounded sounds, 32% of "oo" get a purse peak above 0.2, 17% of "o" and 13% of "w", with a median peak of 0.26; its funnel is rare (39 events in 140 lines, spread over "sh/ch", "ee", "aa" and "oo"). So the model pushes on every rounded sound and the game only on some: the false rate rose from 41% to 47%, and that is the price of the hits. The push is sized by `lip_forward` (swept 0.22, 0.30, 0.38: the 95th percentile rises 0.16, 0.21, 0.27 against the game's 0.20, and hits and correlation barely move, so 0.30). Purse + funnel are held to 0.6, the most the game uses. The rig's jaw-forward track is never used by the game, so it stays off.
+
+**In the video** (the 30 s recording, no captions): the video's `mouthPucker` has a 95th percentile of 0.34 and `mouthFunnel` 0.010 (MediaPipe gives no funnel). Hybrid purse against the video's: 95th percentile 0.07 to 0.34, correlation 0.51 to 0.99. The voice model alone (no words, sound-only lips) correlates with it at 0.43 at a 3-frame lag and reaches 0.13; that path is not changed. On the rendered clip with known purse values, the video-only retarget correlates with the truth at 0.69 but reads small (95th percentile 0.06 for a true 0.31); the old hybrid fell to 0.40, the new one keeps 0.69 and lifts the size to 0.15. **Not measured:** the per-sound hit rate against video (`analyze.py --forward`) needs caption words, and neither recording has any, so it is covered by synthetic tests only and the video numbers here are whole-clip.
+
 ## How well the voice-driven upper face matches
 
 Same clips; the model hears only the audio. "Hit" = a model blink starting within 0.3 s of the game's. "By chance" is what blinks at the same rate, placed at random, would score.

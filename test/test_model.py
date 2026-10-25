@@ -140,5 +140,31 @@ with tempfile.TemporaryDirectory() as tmp:
           _cp.rig_presence({"bones": {"names": [], "parents": [], "t": [], "r": []}}) == 1.0 and _cp.jaw_presence(0.136, 0.0903) == 1.0
           and _cp.jaw_presence(0.154, 0.0978) > 1.05 and _cp.jaw_presence(1, 1) == 1.3)
 
+    # ---- lips pushed forward: oo, w, o -> purse; sh/ch -> funnel (0.3.1) ----
+    fw = [(0.28, "maybe"), (0.68, "you"), (1.08, "should"), (1.5, "church")]
+
+    def fwd(**kw):
+        return lipsync.simulate_lipsync(wav, words=fw, coupling=0, **kw)["tracks"]
+
+    base0 = lipsync.simulate_lipsync(wav, words=fw, coupling=0, profile=dict(lipsync.load_profile("speech"), lip_forward=0.0))["tracks"]
+    on = fwd()
+    peak = lambda t, k: max(t.get(k, [0.0]))
+    check("forward: oo/w/o sounds push the lips out further than before (purse)", peak(on, "lips_l_purse") > peak(base0, "lips_l_purse") + 0.05,
+          f"{peak(base0, 'lips_l_purse'):.2f} -> {peak(on, 'lips_l_purse'):.2f}")
+    check("forward: sh/ch pushes the funnel well past the old table's", peak(on, "lips_l_funnel") > peak(base0, "lips_l_funnel") + 0.08,
+          f"{peak(base0, 'lips_l_funnel'):.2f} -> {peak(on, 'lips_l_funnel'):.2f}")
+    changed = [k for k in on if k not in base0 or on[k] != base0[k]]
+    check("forward: only purse and funnel change; the jaw, closures and tongue are as before", all(k.startswith(("lips_l_purse", "lips_r_purse", "lips_l_funnel", "lips_r_funnel")) for k in changed),
+          ", ".join(changed))
+    a5, a10, a15 = (peak(fwd(articulation=a), "lips_l_purse") for a in (0.5, 1.0, 1.5))
+    check("forward: articulation scales the push (0.5 < 1.0 < 1.5)", a5 < a10 < a15, f"{a5:.2f} / {a10:.2f} / {a15:.2f}")
+    check("forward: purse + funnel together never pass what the game uses (0.6)",
+          all(p + f <= 0.6 + 1e-9 for p, f in zip(fwd(articulation=2.0)["lips_l_purse"], fwd(articulation=2.0)["lips_l_funnel"])))
+    sing = lipsync.simulate_lipsync(wav, words=fw, coupling=0, profile="singing")["tracks"]
+    sing_off = lipsync.simulate_lipsync(wav, words=fw, coupling=0, profile=dict(lipsync.load_profile("singing"), lip_forward=0.0))["tracks"]
+    check("forward: singing has no reference and is unchanged", sing == sing_off)
+    mute = lipsync.simulate_lipsync(wav, words=[(0.28, "maybe")], coupling=0)["tracks"]
+    check("forward: no rounded sound, no forward push", peak(mute, "lips_l_funnel") < 0.05)
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

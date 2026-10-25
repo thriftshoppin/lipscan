@@ -74,7 +74,9 @@ def run_all(**extra):
             wav = os.path.join(tmp, f"{vname}.wav")
             if not os.path.exists(wav):
                 voice(wav, syl, length, f0)
-            res = lipsync.simulate_lipsync(wav, profile=profile, seed=1, **kw, **extra)
+            cfg = lipsync.load_profile(profile)
+            cfg["lip_forward"] = 0.0                    # 0.3.0 added the forward push on oo/w/o/sh/ch; the hashes are for it switched off
+            res = lipsync.simulate_lipsync(wav, profile=cfg, seed=1, **kw, **extra)
             out[name] = {"all": digest(res), "mouth": digest(res, MOUTH)}
     return out
 

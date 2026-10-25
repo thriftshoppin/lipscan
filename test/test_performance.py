@@ -310,5 +310,48 @@ for v in nan_tr.values():
 cpn = rt.add_coupling(nan_tr, 60, 1.0, 1.0)
 check("hybrid coupling: frames with no face stay empty", all(np.isnan(cpn[k][45]) for k in tr))
 
+# ---- 0.3.1: lips pushed forward kept from the video; forward check ----
+n = 120
+none = np.full(n, np.nan)
+puck = np.zeros(n)
+puck[30:45] = 0.6
+puck[80:90] = 0.4
+voice_p = np.zeros(n)
+voice_p[30:45] = 0.2
+h = rt.hybrid_tracks({"lips_l_purse": puck.copy(), "lips_r_purse": puck.copy()}, {"lips_l_purse": voice_p.copy(), "lips_r_purse": voice_p.copy()}, size=np.full(n, 0.5))
+check("hybrid forward: a clearly puckering video sets the purse (the old merge kept a fifth of it)",
+      np.allclose(h["lips_l_purse"], puck) and np.percentile(h["lips_l_purse"], 95) > 0.3, f"{h['lips_l_purse'].max():.2f}")
+weak = puck * 0.1
+h = rt.hybrid_tracks({"lips_l_purse": weak}, {"lips_l_purse": voice_p.copy()}, size=None)
+check("hybrid forward: a weak reading (small face) is lifted, shape kept",
+      np.percentile(h["lips_l_purse"], 95) > 2 * np.percentile(weak, 95) and np.corrcoef(h["lips_l_purse"], weak)[0, 1] > 0.99,
+      f"{np.percentile(weak, 95):.3f} -> {np.percentile(h['lips_l_purse'], 95):.3f}")
+h = rt.hybrid_tracks({"lips_l_purse": np.zeros(n)}, {"lips_l_purse": voice_p.copy()}, size=None)
+check("hybrid forward: a video with no pucker at all leaves the voice's purse alone", np.allclose(h["lips_l_purse"], voice_p))
+gap = puck.copy()
+gap[50:70] = np.nan
+h = rt.hybrid_tracks({"lips_l_purse": gap}, {"lips_l_purse": voice_p.copy()}, size=None)
+check("hybrid forward: where no face is seen the voice's purse carries on", np.allclose(h["lips_l_purse"][50:70], voice_p[50:70]) and np.allclose(h["lips_l_purse"][30:45], 0.6))
+fun = np.zeros(n)
+fun[100:110] = 0.5
+h = rt.hybrid_tracks({"lips_l_purse": puck.copy(), "lips_l_funnel": np.zeros(n)}, {"lips_l_funnel": fun.copy()}, size=None)
+check("hybrid forward: the voice's funnel is kept (MediaPipe's is nearly always 0)", np.allclose(h["lips_l_funnel"], fun))
+h = rt.hybrid_tracks({"lips_l_purse": puck.copy()}, {"lips_l_funnel": np.full(n, 0.5)}, size=None)
+check("hybrid forward: purse + funnel stay within 0.6", np.all(h["lips_l_purse"] + h["lips_l_funnel"] <= 0.6 + 1e-9))
+
+sys.path.insert(0, os.path.join(ROOT, "analyze"))
+import analyze as an2  # noqa: E402
+vid = {"lips_l_purse": list(puck)}
+good = {"lips_l_purse": list(np.roll(puck, 1))}
+flat = {"lips_l_purse": [0.0] * n}
+segs = [("OO", 33, 40), ("W", 82, 86), ("OO", 8, 14)]                      # the third has no pucker in the video
+sc_good = an2.forward_scores(good, vid, good, segs, n)["purse"]
+sc_flat = an2.forward_scores(flat, vid, flat, segs, n)["purse"]
+check("forward check: a model that puckers with the video hits both pucker sounds; a flat one hits none",
+      sc_good["model"]["hit"] == 1.0 and sc_good["model"]["video_puckers"] == 2 and sc_flat["model"]["hit"] == 0.0,
+      f"{sc_good['model']['hit']} vs {sc_flat['model']['hit']}")
+check("forward check: whole-clip correlation is high for the matching curve and a pucker the video lacks counts as false",
+      sc_good["model"]["corr"] > 0.95 and sc_good["model"]["false"] == 0.0 and an2.forward_scores({"lips_l_purse": [0.5] * n}, vid, good, segs, n)["purse"]["model"]["false"] > 0)
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

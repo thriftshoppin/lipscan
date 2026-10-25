@@ -118,6 +118,8 @@ The jaw also takes the video where the mouth is clearly wider than the voice sug
 
 The hybrid takes the same dials as the voice model: `--articulation`, `--expressiveness` (the voice side's), `--coupling` and `--jaw-presence` (or `--rig character.json`), and `--profile` for the voice side. The coupling is added after the merge, so the cheeks, nose and chin follow whichever mouth the tracks ended up with; frames with no face stay empty. `--out -` writes the result to the terminal.
 
+Lips pushed forward: where the video reads pucker, the hybrid's purse is the video's (a weak reading lifted toward a 95th percentile of 0.15, at most 4 times; funnel is the larger of the two; purse + funnel at most 0.6). Without it the voice model's purse was scaled by the mouth size and the video's pucker was discarded. `analyze.py "<folder>" --forward` scores this against the video (docs/MEASUREMENTS.md).
+
 ## In the viewer
 
 The face viewer (built with `claude/skills/cyberpunk-face-viewer`) plays `retarget-cyberpunk.json` in slot A or B:

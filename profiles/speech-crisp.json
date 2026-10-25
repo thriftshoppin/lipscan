@@ -31,7 +31,8 @@
     "head_smooth_ms": "the same for head motion",
     "audio_lips_gain": "without words, lips come from the sound (model/audio_lips.json); the regression shrinks peaks to about half the game's, so they're scaled up by this",
     "audio_tongue_gain": "the same for the tongue",
-    "articulation": "0.0-2.0, 1.0 = as measured. Scales the peak and the speed of the sharp consonants and the lip pursing. The command line's --articulation overrides it."
+    "articulation": "0.0-2.0, 1.0 = as measured. Scales the peak and the speed of the sharp consonants and the lip pursing. The command line's --articulation overrides it.",
+    "lip_forward": "peak of the forward push (purse on oo, w, o; funnel on sh/ch/j) in 0-1; 0 = off. 0.3 puts the model's purse 95th percentile at the game's (0.21 vs 0.20) and its funnel 99th at the game's (0.17 vs 0.18). Articulation scales it. Only with words or text; sound-only lips are unchanged"
   },
   "jaw_mean": {
     "-60": 0.027,
@@ -172,6 +173,7 @@
   "tongue_contrast": 1.5,
   "lip_mode": "learned",
   "lip_contrast": 2.5,
+  "lip_forward": 0.3,
   "face_smooth_ms": 50,
   "head_smooth_ms": 120,
   "audio_lips_gain": 1.7,

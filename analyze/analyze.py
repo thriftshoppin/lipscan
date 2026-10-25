@@ -481,6 +481,81 @@ def print_sweep(sw):
                   + f"       {np.mean(mc) if mc else float('nan'):.3f}      {np.mean(fc) if fc else float('nan'):.3f}")
 
 
+# ----------------------------------------------------------------------------
+# 6. Forward lips: does the model (and the hybrid) push the lips out where the video does?
+# ----------------------------------------------------------------------------
+FORWARD_SOUNDS = {"OO": "purse", "W": "purse", "O": "purse", "CH": "funnel"}
+
+
+def forward_scores(model, video, hybrid, segments, n, window=4):
+    """model, video, hybrid: {track: values per frame} (video/hybrid from retarget.py). segments: [(sound, start, end)] frames of
+    the rounded and protruded sounds (oo, w, o, sh/ch), from the caption words. A segment "puckers" in the video when the
+    video's purse (funnel for sh/ch) rises above 40% of its own 95th percentile (at least 0.05) within `window` frames of the
+    sound; the model "hits" when its own rises above 0.1 there. Also the whole-clip correlation of the curves."""
+    out = {}
+    for kind in ("purse", "funnel"):
+        key = f"lips_l_{kind}"
+        v = np.array([np.nan if x is None else x for x in video.get(key, [])], float)
+        if len(v) < 15 or np.isnan(v).all():
+            continue
+        v = np.pad(v, (0, max(0, n - len(v))), constant_values=np.nan)[:n]
+        thr = max(0.05, 0.4 * float(np.nanpercentile(v, 95)))
+        res = {"video_p95": round(float(np.nanpercentile(v, 95)), 3)}
+        for name, src in (("model", model), ("hybrid", hybrid)):
+            m = np.array(src.get(key, [0.0] * n), float) if key in src else np.zeros(n)
+            m = np.pad(np.nan_to_num(m), (0, max(0, n - len(m))))[:n]
+            ok = ~np.isnan(v) & (np.arange(n) < len(m))
+            c, lag = _best_lag_corr(m, np.nan_to_num(v))
+            res[name] = {"corr": None if math.isnan(c) else round(c, 3), "lag_frames": lag, "p95": round(float(np.percentile(m, 95)), 3)}
+            segs = [(a, b) for sound, a, b in segments if FORWARD_SOUNDS.get(sound) == kind]
+            if segs:
+                vid = [np.nanmax(v[max(0, a - window):min(n, b + window + 1)]) > thr if not np.isnan(v[max(0, a - window):min(n, b + window + 1)]).all() else None
+                       for a, b in segs]
+                mod = [m[max(0, a - window):min(n, b + window + 1)].max() > 0.1 for a, b in segs]
+                seen = [i for i, x in enumerate(vid) if x is not None]
+                pos = [i for i in seen if vid[i]]
+                res[name].update({"segments": len(seen), "video_puckers": len(pos),
+                                  "hit": round(sum(mod[i] for i in pos) / max(1, len(pos)), 2),
+                                  "false": round(sum(mod[i] and not vid[i] for i in seen) / max(1, sum(mod[i] for i in seen)), 2)})
+        out[kind] = res
+    return out
+
+
+def run_forward(folder, profile="speech"):
+    """forward_scores for a recording: the model and the hybrid against the video's pucker/funnel, on the caption words' sounds."""
+    sys.path.insert(0, os.path.join(ROOT, "retarget"))
+    import retarget as rt
+    folder = os.path.abspath(folder)
+    trace = json.load(open(os.path.join(folder, "trace.json"), encoding="utf-8"))
+    video = rt.retarget(folder, hybrid=False)
+    hybrid = rt.retarget(folder, hybrid=True, profile=profile)
+    n = int(round(video["duration"] * FPS))
+    wav = os.path.join(folder, trace["audio"]["file"])
+    words, _ = caption_words(folder, trace["start"], n / FPS)
+    cfg = sim.load_profile(profile)
+    res = sim.simulate_lipsync(wav, profile=cfg, words=words or None)
+    segments = []
+    if words:
+        s_, rate = sim.load_wav(wav)
+        db = sim.normalize(sim.loudness_db(s_, rate), cfg["normalize_to_db"])
+        segments = [x for x in sim.place_timed_words(words, db) if x[0] in FORWARD_SOUNDS]
+    return {"folder": os.path.basename(folder), "profile": profile, "seconds": round(n / FPS, 1), "caption_words": len(words),
+            "segments": len(segments), "scores": forward_scores(res["tracks"], video["tracks"], hybrid["tracks"], segments, n)}
+
+
+def print_forward(fw):
+    print(f"\nForward lips against the video in {fw['folder']} ({fw['seconds']} s, profile {fw['profile']}, "
+          f"{fw['caption_words']} caption words, {fw['segments']} oo/w/o/sh/ch sounds)")
+    if not fw["segments"]:
+        print("  no caption words: whole-clip correlation only (fix the captions in captions.txt for the per-sound hit rate)")
+    for kind, r in fw["scores"].items():
+        print(f"  {kind}: the video's 95th percentile is {r['video_p95']}")
+        for name in ("model", "hybrid"):
+            x = r[name]
+            seg = f"   sounds where the video {'puckers' if kind == 'purse' else 'funnels'}: {x['video_puckers']}/{x['segments']}, hit {x['hit']:.0%}, false {x['false']:.0%}" if "hit" in x else ""
+            print(f"    {name:7s} corr {x['corr']}  (lag {x['lag_frames']:+d} frames)  95th pct {x['p95']}{seg}")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Measure mouth movement in a video trace and score lipsync_sim against it.")
     ap.add_argument("folder")
@@ -488,10 +563,18 @@ def main():
     ap.add_argument("--save-profile", metavar="NAME", help="also write profiles/NAME.json from these measurements")
     ap.add_argument("--no-captions", action="store_true")
     ap.add_argument("--retrack", action="store_true", help="run face tracking again even if face-30fps.json exists")
+    ap.add_argument("--forward", action="store_true", help="instead: score the pucker/funnel (lips pushed forward) of the model and the hybrid "
+                    "against the video, on the oo/w/o/sh/ch sounds of the caption words (needs performance.json); writes forward.json")
     ap.add_argument("--sweep", action="store_true", help="instead: score articulation, expressiveness and coupling settings against the real face "
                     "(needs performance.json from analyze/performance.py); writes sweep.json")
     ap.add_argument("--grid", nargs="*", metavar="DIAL=v1,v2,..", help="values to try with --sweep, e.g. articulation=0,0.5,1,1.5,2 expressiveness=0,0.5,1,1.5,2")
     a = ap.parse_args()
+    if a.forward:
+        fw = run_forward(a.folder, a.profile)
+        print_forward(fw)
+        with open(os.path.join(os.path.abspath(a.folder), "forward.json"), "w") as fh:
+            json.dump(fw, fh, indent=1)
+        return
     if a.sweep:
         grid = {"articulation": [0.0, 0.5, 1.0, 1.5, 2.0], "expressiveness": [0.0, 0.5, 1.0, 1.5, 2.0], "coupling": [0.0, 1.0, 2.0]}
         if a.grid:

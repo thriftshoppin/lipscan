@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.1 (2026-10-25)
+
+Lips that push forward. The mouth had width and height but almost no depth: rounded sounds barely pursed and the hybrid threw away the video's pucker.
+
+- **Where it was lost (measured):**
+  - **Video reading:** fine. The recording's `mouthPucker` reaches 0.37 (95th percentile) and 0.94, and clean-up changes it by less than 0.01. `mouthFunnel` is the exception: MediaPipe itself gives about nothing (95th percentile 0.013). Head turns do not leak into it (correlation with head yaw, pitch, roll 0.06-0.13). Landmark depth is not used directly; MediaPipe's blendshapes already come from the 3D landmarks.
+  - **Mapping:** fine. Pucker and funnel map to the rig's purse and funnel at gain 1.0, clamp 0-1. The rig's `jaw_mid_shift_fwd` is driven by nothing, and the game never uses it either (0 events in 140 lines).
+  - **Hybrid (the main fault):** purse and funnel counted as speech tracks, so the hybrid took them from the voice and scaled them by the mouth size. The video's purse (95th percentile 0.34) came out at 0.07, a fifth, and correlation with the video's was 0.51.
+  - **Voice model (second fault):** the learned lip table averages over each sound's window and the soft smoothing eats short ones, so purse peaked at 60% of the game's (99th percentile 0.18 vs 0.32) and funnel hardly appeared (0.04 vs 0.18; 4 events against the game's 39).
+- **Hybrid:** where the video reads pucker, it sets the purse wherever the face is seen (the voice's carries on in gaps). A strong reading is kept as it is; a weak one (a small face) is lifted toward a 95th percentile of 0.15, at most 4 times, keeping its shape. Funnel keeps the larger of the two; purse + funnel stay within the game's 0.6. On the recording the hybrid's purse now matches the video's (95th percentile 0.07 to 0.34, correlation 0.51 to 0.99). On the rendered clip with known values, correlation with the true purse went from 0.40 to 0.69.
+- **Voice model:** new profile key `lip_forward` (the peak of the push; 0 = off, the code default; 0.3 in the speech profiles). Rounded sounds get their own pulse: oo and w and o purse, sh/ch/j funnel, r a little, ahead of the sound like the other lip shapes. Articulation scales both size and speed. Against the game's lines purse 95th percentile 0.13 to 0.21 (game 0.20), funnel 99th 0.04 to 0.17 (game 0.18); purse hits within 8 frames 67% to 82%; funnel hits 5% to 72%. Jaw, p/b/m and f/v are identical to the byte. Singing and sound-only lips are unchanged.
+- **Check:** `analyze.py "<folder>" --forward` scores the model's and the hybrid's purse and funnel against the video's, on the oo/w/o/sh/ch sounds of the caption words (hit rate and false rate) and over the whole clip (correlation and lag).
+- **Tests:** 15 new checks (32 in test_model.py, 72 in test_performance.py). `test/golden.py` now pins the output with `lip_forward` off.
+
 ## 0.3.0 (2026-10-25)
 
 Dials for how crisp the mouth is and how much the face follows the voice's tone, cheeks and chin that follow the lips and jaw, and a mouth reading that keeps fast closures.

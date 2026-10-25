@@ -164,6 +164,39 @@ def add_coupling(tracks, n, strength, presence):
     return tracks
 
 
+VIDEO_PURSE_MIN = 0.03       # below this (95th percentile) the video shows no pucker at all in this clip: the voice's stays
+VIDEO_PURSE_TARGET = 0.15    # a small face reads pucker weakly (0.06 where the true value was 0.32, correlation still 0.69): lift it to this
+VIDEO_PURSE_GAIN_MAX = 4.0
+FORWARD_MAX = 0.6            # purse + funnel together; the most the game ever uses (model/lipsync.py LIP_FORWARD_MAX)
+
+
+def forward_from_video(video, out):
+    """Lips pushed forward (purse, funnel). The video reads the pucker well (a clip's mouthPucker reaches 0.3-0.9), while
+    the voice only knows which sounds are rounded, and was scaled down by the mouth size besides, so the hybrid kept about
+    a fifth of the video's pucker. Where the video reads pucker in this clip, it sets the purse wherever the face is seen
+    (the voice's carries on in the gaps); a weak reading (a small face) is lifted toward VIDEO_PURSE_TARGET, a strong one is kept as it is. MediaPipe's funnel is nearly always 0 (95th percentile 0.01 here), so the funnel
+    keeps the larger of the two. Purse + funnel stay within what the game uses."""
+    for side in "lr":
+        key = f"lips_{side}_purse"
+        vp = video.get(key)
+        if vp is not None:
+            seen = ~np.isnan(vp)
+            p95 = np.percentile(vp[seen], 95) if seen.sum() >= 10 else 0.0
+            if p95 >= VIDEO_PURSE_MIN:
+                gain = min(VIDEO_PURSE_GAIN_MAX, max(1.0, VIDEO_PURSE_TARGET / p95))
+                out[key] = np.where(seen, np.minimum(1.0, vp * gain), out.get(key, np.zeros_like(vp)))
+        key = f"lips_{side}_funnel"
+        vf = video.get(key)
+        if vf is not None and key in out:
+            out[key] = np.fmax(out[key], np.nan_to_num(vf))
+        pu, fu = out.get(f"lips_{side}_purse"), out.get(f"lips_{side}_funnel")
+        if pu is not None and fu is not None:
+            tot = np.nan_to_num(pu) + fu
+            k = np.where(tot > FORWARD_MAX, FORWARD_MAX / np.maximum(tot, 1e-9), 1.0)
+            out[f"lips_{side}_purse"], out[f"lips_{side}_funnel"] = pu * k, fu * k
+    return out
+
+
 def hybrid_tracks(video, voice, size=None):
     """video, voice: {track: array}. Speech tracks come from the voice; the jaw also takes the video where the video
     shows the mouth open further than the voice suggests; every other track comes from the video. No face in a frame:
@@ -180,7 +213,7 @@ def hybrid_tracks(video, voice, size=None):
                 out[k] = np.fmax(out.get(k, np.zeros_like(v)), np.nan_to_num(v))
         else:
             out[k] = v
-    return out
+    return forward_from_video(video, out)
 
 
 def tongue_from_audio(folder, trace, n):

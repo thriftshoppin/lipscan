@@ -20,6 +20,7 @@ A profile is a JSON file in `profiles/` that tells the model how a mouth moves. 
 | `symmetric` | `true` keeps left and right identical; `false` adds a slight drift, like motion capture. |
 | `lip_mode` | `learned` (default): the game's soft lip mixes per sound, blending from sound to sound; p/b/m and f/v stay crisp. `shapes`: one fixed shape per sound (0.2.2 and earlier). |
 | `lip_contrast`, `tongue_contrast` | How much the learned lip and tongue shapes are pushed past the game's averages, which timing errors blur (2.5 and 1.5). |
+| `lip_forward` | The peak of the forward push on rounded sounds (purse on oo, w, o; funnel on sh/ch/j), 0-1; 0 turns it off (the default for a profile without it). The speech profiles use 0.3. Articulation scales it. Needs words or text. |
 | `face_smooth_ms`, `head_smooth_ms` | A final, slight zero-phase smoothing of the face (blinks and p/b/m presses stay crisp) and of head motion. 0 turns it off. |
 | `soft_attack_ms`, `soft_release_ms` | How fast lip and tongue shapes other than p/b/m presses ease in and out (the game's never pop). |
 | `closure_peak` | The strongest a p/b/m press gets (default 1.0). Other lip shapes give way under a press. |

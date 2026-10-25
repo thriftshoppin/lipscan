@@ -410,6 +410,47 @@ def tongue_tracks(placed, n, speaking, cfg, fps=FPS, art=1.0):
                           cfg.get("tongue_contrast", 1.5), cfg.get("tongue_attack_ms", 80), cfg.get("tongue_release_ms", 120), fps, art)
 
 
+# Lips that push forward. The learned lip table gives the average over a sound's window, and smoothing a short window takes
+# the rest, so the model's pursed lips peaked at about 60% of the game's (99th percentile 0.18 against 0.32) and its funnel
+# almost never showed (0.04 against 0.18). These sounds get their own pulse, sized to the game's median peak (0.26).
+# {sound: (track, share of the profile's lip_forward peak)}; the game's rounded vowels pucker, "sh/ch/j" funnel, "r" a little.
+FORWARD = {"OO": ("purse", 1.0), "W": ("purse", 1.0), "O": ("purse", 0.8), "CH": ("funnel", 1.0), "R": ("purse", 0.3)}
+FORWARD_HOLD = 5          # frames: the shortest forward push that reads on screen
+
+
+def forward_tracks(placed, n, speaking, cfg, fps=FPS, art=1.0):
+    """Purse and funnel pulses on the rounded and protruded sounds, ahead of the sound like the other lip shapes. The
+    profile's lip_forward is the peak (0 = off, the code default); articulation scales both its size and its speed, so a
+    crisp delivery pushes further and faster. Returns {track: values}; the caller keeps the larger of this and the learned lips."""
+    peak = cfg.get("lip_forward", 0.0)
+    if peak <= 0 or not placed:
+        return {}
+    ts = time_scale(art)
+    lead = round(cfg["shape_lead_ms"] * fps / 1000)
+    raw = {}
+    for vis, start, end in placed:
+        if vis not in FORWARD:
+            continue
+        kind, share = FORWARD[vis]
+        hold = max(2, round(FORWARD_HOLD / ts)) if art != 1.0 else FORWARD_HOLD
+        short = hold - (end - start + 1)
+        if short > 0:
+            start, end = start - short // 2, end + short - short // 2
+        level = min(LIP_FORWARD_MAX, peak * share * art)
+        t = raw.setdefault(kind, [0.0] * n)
+        for f in range(max(0, start - lead), min(n, end + 1 - lead)):
+            if speaking[min(n - 1, f + lead)]:
+                t[f] = max(t[f], level)
+    soft = dict(cfg, attack_ms=cfg.get("forward_attack_ms", 60) / ts, release_ms=cfg.get("forward_release_ms", 100) / ts,
+                max_open_speed=99, max_close_speed=99)
+    out = {}
+    for kind, v in raw.items():
+        sm = smooth(v, soft, fps)
+        for side in "lr":
+            out[f"lips_{side}_{kind}"] = sm
+    return out
+
+
 def lip_tracks(placed, n, speaking, cfg, fps=FPS, art=1.0):
     """Soft lip shapes from the placed sounds (LIPS_BY_VISEME), blending from sound to sound."""
     names = lambda k: [f"lips_l_{k}", f"lips_r_{k}"] if k in SIDED else [f"lips_{k}"]
@@ -973,6 +1014,15 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
             soft = lip_tracks(placed, n, loud, cfg, art=art)
             for k, v in sharp.items():
                 soft[k] = [max(x, y) for x, y in zip(soft.get(k, [0.0] * n), v)]
+            for k, v in forward_tracks(placed, n, loud, cfg, art=art).items():      # lips pushed forward on oo, w, o, sh/ch
+                soft[k] = [max(x, y) for x, y in zip(soft.get(k, [0.0] * n), v)]
+            for side in "lr":                                                      # purse + funnel stay within what the game uses
+                p_, f_ = soft.get(f"lips_{side}_purse"), soft.get(f"lips_{side}_funnel")
+                if p_ and f_:
+                    for f in range(n):
+                        tot = p_[f] + f_[f]
+                        if tot > LIP_FORWARD_MAX:
+                            p_[f], f_[f] = p_[f] * LIP_FORWARD_MAX / tot, f_[f] * LIP_FORWARD_MAX / tot
             press = [max(tracks.get(k, [0.0] * n)[f] for k in CLOSURE) for f in range(n)]
             for k, v in soft.items():
                 tracks[k] = [x * (1 - min(1.0, p)) for x, p in zip(v, press)]
