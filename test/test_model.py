@@ -170,6 +170,15 @@ with tempfile.TemporaryDirectory() as tmp:
     smile = {"jaw_mid_open": [0.3] * 30, "lips_l_corner_up": [1.0] * 30, "lips_r_corner_up": [1.0] * 30, "lips_l_pull": [1.0] * 30, "lips_l_stretch": [1.0] * 30,
              "lips_together_up": [0.0] * 30}
     _cp.couple(smile, 30, 2.0, 1.3)
+    # ---- hard k/g/c/q: a burst, then the next sound's shape ----
+    hard = lipsync.load_profile("singing-hard")
+    kuh = lipsync.diction_tracks([("K", 10, 12), ("UH", 13, 22)], 40, hard)[0]
+    qwuh = lipsync.diction_tracks([("K", 10, 12), ("W", 13, 17), ("UH", 18, 27)], 40, hard)[0]
+    plain = lipsync.diction_tracks([("K", 10, 12), ("UH", 13, 22)], 40, lipsync.load_profile("singing"))[0]
+    check("k/g: singing-hard gives the hard k a lip burst that is over by the vowel; the default profile gives it none",
+          max(kuh["lips_l_upper_raise"][9:14]) > 0.05 and max(kuh["lips_l_upper_raise"][21:]) < 0.02 and "lips_l_upper_raise" not in plain)
+    check("qu: the burst gives way to the rounding (no corner lift where the lips purse)",
+          "lips_l_corner_up" not in qwuh and "lips_l_upper_raise" in qwuh)
     check("coupling: a huge smile cannot push the smile fold or the squint past their caps",
           max(smile["lips_l_nasolabialDeepener"]) <= 0.35 + 1e-9 and max(smile["eye_l_oculi_squint_outer_lower"]) <= 0.3 + 1e-9,
           f"{max(smile['lips_l_nasolabialDeepener']):.2f} / {max(smile['eye_l_oculi_squint_outer_lower']):.2f}")

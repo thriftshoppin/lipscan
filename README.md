@@ -58,13 +58,13 @@ Those rules became a model. To check them against real people rather than one ga
 |---|---|
 | `capture/extension/` | Firefox add-on. It can only touch `youtube.com` tabs and only talks to `127.0.0.1:8766`. It never writes files. Its badge shows ON, OFF or REC, and the popup has an off switch and a Stop button. |
 | `capture/server/` | MCP server `lipscan` (Node 18+, no dependencies). Tools: `lipscan_status`, `lipscan_start`, `lipscan_stop`, `lipscan_list`. |
-| `analyze/` | Whole-face tracking (`performance.py`), measurements (`analyze.py`), and measuring a game character's upper face (`game_upper_face.py`). Python and MediaPipe. |
+| `analyze/` | Whole-face tracking (`performance.py`), measurements (`analyze.py`), measuring a game character's upper face (`game_upper_face.py`), importing a video file (`import_video.py`), isolating the voice from music (`separate.py`) and using your own lyrics (`lyrics.py`). Python and MediaPipe. |
 | `retarget/` | Recorded performance to face-rig curves and head angles. |
 | `model/` | Voice and words to face curves (plain Python, no dependencies; numpy makes pitch tracking faster). Includes the CMU Pronouncing Dictionary. |
 | `profiles/` | Measured settings: `speech-cyberpunk` (six characters), `speech-kerry` and `singing-kerry` (one character each), the game's mood presets in `moods/`, and any you make. |
 | `export/` | Track naming for each target, and the editable MediaPipe-to-Cyberpunk mapping. |
 | `test/` | Self-tests and a terminal driver. |
-| `docs/` | History, WolvenKit guide, measurements, profiles, security. |
+| `docs/` | Importing a video, using the viewer, history, WolvenKit guide, measurements, profiles, security. |
 | `viewer/` | Source of the 3D face viewer: game clips and LipScan curves played on a Cyberpunk 2077 character's real head, side by side. You build the character from **your own** game files; no game data or prebuilt viewer is shipped. |
 | `claude/skills/cyberpunk-face-viewer/` | A Claude skill explaining the viewer and the game's face system, so Claude can build or adapt it. |
 
@@ -106,6 +106,7 @@ Those rules became a model. To check them against real people rather than one ga
   ```
   node test\lipscan-call.mjs lipscan_start "{\"maxSeconds\":30}" --wait
   ```
+- **Import a video file instead (no browser):** `python analyze\import_video.py "my video.mp4" "<trace folder>" "a title"` makes the same folder, then everything below applies. Music in the sound? Isolate the voice first (`analyze\separate.py`), and give singing your own lyrics (`analyze\lyrics.py`, or the viewer's Lyrics box). The whole route is in [docs/IMPORTING.md](docs/IMPORTING.md); watching the result is in [docs/USING_THE_VIEWER.md](docs/USING_THE_VIEWER.md). Works best when the take voices **all** the vocals you give it.
 - **Fix captions:** edit `captions.txt` in the recording's folder. Change only the words after the tab; YouTube's per-word times are kept.
 - **Record the whole face, then put it on a rig:**
   ```
@@ -137,7 +138,7 @@ Those rules became a model. To check them against real people rather than one ga
 
 ## See it on a real head (Cyberpunk 2077)
 
-`viewer/` holds the viewer's source code. LipScan doesn't ship any game data, so you build the character from **your own** install. See [viewer/README.md](viewer/README.md).
+`viewer/` holds the viewer's source code. LipScan doesn't ship any game data, so you build the character from **your own** install. See [viewer/README.md](viewer/README.md) to build a character, and [docs/USING_THE_VIEWER.md](docs/USING_THE_VIEWER.md) to use it with your own videos.
 
 - **The converter** (`build_character.py`): reads a character's head, face skeleton and facial setup with WolvenKit, into a private character pack.
 - **The viewer:** one offline HTML file, built with `npm install` then `node build.mjs`. It runs a rebuilt copy of the game's face solver and has:
@@ -184,7 +185,7 @@ The game's face clips contain no head turns, so the model's head motion has no g
 | Live capture on YouTube | Built, first live run pending |
 | Analysis | Runs end to end; scoring on real faces pending the first live capture |
 | Getting curves back into Cyberpunk 2077 | Not tested yet (see the WolvenKit guide) |
-| Local video files (no browser) | Planned |
+| Local video files (no browser) | Working: `analyze/import_video.py`, then the same steps (docs/IMPORTING.md). Tested on one close-up singing video. |
 
 ## Tests
 

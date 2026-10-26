@@ -452,7 +452,7 @@ def run_sweep(folder, profile, grid, words_from_captions=True):
     trace = json.load(open(os.path.join(folder, "trace.json"), encoding="utf-8"))
     ref = rt.retarget(folder, hybrid=False)
     n = int(round(ref["duration"] * FPS))
-    wav = os.path.join(folder, trace["audio"]["file"])
+    wav = rt.voice_file(folder, trace["audio"])
     words, _ = caption_words(folder, trace["start"], n / FPS) if words_from_captions else ([], 0)
     results = []
     for dial, values in grid.items():
@@ -530,7 +530,7 @@ def run_forward(folder, profile="speech"):
     video = rt.retarget(folder, hybrid=False)
     hybrid = rt.retarget(folder, hybrid=True, profile=profile)
     n = int(round(video["duration"] * FPS))
-    wav = os.path.join(folder, trace["audio"]["file"])
+    wav = rt.voice_file(folder, trace["audio"])
     words, _ = caption_words(folder, trace["start"], n / FPS)
     cfg = sim.load_profile(profile)
     res = sim.simulate_lipsync(wav, profile=cfg, words=words or None)

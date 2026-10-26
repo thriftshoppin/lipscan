@@ -241,7 +241,16 @@ with tempfile.TemporaryDirectory() as tmp:
              "eye_l_blink": np.array([0.0, 1.0, 0.0])}
     hy = rt.hybrid_tracks(video, voice)
     check("hybrid: jaw is the voice's, unless the video shows the mouth wider", list(hy["jaw_mid_open"]) == [0.3, 0.4, 0.3])
-    check("hybrid: lip shapes and tongue come from the voice, not the video", list(hy["lips_l_purse"]) == [0.0, 0.5, 0.0] and list(hy["tongue_mid_lift"]) == [0.1, 0.1, 0.1])
+    gap = np.array([0.2, 0.2, 0.01, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, nan])
+    cl = {"lips_together_up": np.array([0, 0, 1.0, 0, 0, 0, 0, 1.0, 1.0, 0, 0, 1.0]), "lips_together_dn": np.array([0, 0, 1.0, 0, 0, 0, 0, 1.0, 1.0, 0, 0, 1.0])}
+    gated = rt.gate_voice_closures({k: v.copy() for k, v in cl.items()}, gap)["lips_together_up"]
+    check("blocked is not muffled: a voice closure stays where the video's lips meet, goes where they are open, and stays where no face is seen",
+          list(gated) == [0, 0, 1.0, 0, 0, 0, 0, 0, 0, 0, 0, 1.0])
+    hy_old = rt.hybrid_tracks(video, voice, reinforce=False)
+    check("hybrid: with reinforce off, lip shapes and tongue come from the voice, not the video",
+          list(hy_old["lips_l_purse"]) == [0.0, 0.5, 0.0] and list(hy_old["tongue_mid_lift"]) == [0.1, 0.1, 0.1])
+    check("hybrid: the voice reinforces the video's lip shapes (never below the video, the voice's consonants on top); the tongue is the voice's",
+          list(hy["lips_l_purse"]) == [0.3, 0.5, 0.3] and list(hy["tongue_mid_lift"]) == [0.1, 0.1, 0.1])
     check("hybrid: blinks, brows and smiles come from the video (and stay empty where no face was seen)",
           hy["eye_l_blink"][0] == 0.9 and np.isnan(hy["eye_l_blink"][2]) and hy["lips_l_corner_up"][1] == 0.5 and "eye_l_brows_raise_in" in hy)
     check("hybrid: speech tracks are recognised (jaw, lip shapes, tongue, neck) and face tracks are not",
@@ -509,6 +518,21 @@ listing = [hair_dir + "hh_053_ma__kerry_eurodyne_common\\hh_053_ma__kerry_eurody
 head = "base\\characters\\main_npc\\kerry_eurodyne\\h0_001_ma_c__kerry_eurodyne\\h0_001_ma_c__kerry_eurodyne_old.mesh"
 check("hair: the character's plain hair mesh is chosen over the young and common variants, and a head with none gives None",
       bh.find_hair(FakeGame(listing), head).endswith("hh_053_ma__kerry_eurodyne.mesh") and bh.find_hair(FakeGame([]), head) is None)
+
+# ---- typed lyrics: lined up to the speech-to-text word times ----
+import lyrics as ly  # noqa: E402
+heard = [(1.0, "I'm"), (1.3, "driving"), (2.5, "black"), (6.0, "angel"), (6.4, "left"), (6.9, "my"), (7.3, "riding"), (7.8, "angle")]
+placed = ly.align(["I'm", "driving", "back", "on", "black", "the", "angel", "left", "my", "riding", "angle"], heard)
+t = dict((w, tt) for tt, w in placed)
+check("lyrics: a word it heard right keeps its time; words it missed come just after the word before, in order, and never past the next",
+      t["black"] == 2.5 and t["angle"] == 7.8 and 1.3 < t["back"] < t["on"] < 2.5 and 2.5 < t["the"] < 6.0 and [w for _, w in placed][0] == "I'm"
+      and all(placed[i][0] <= placed[i + 1][0] for i in range(len(placed) - 1)))
+check("lyrics: a stretch it heard wrongly takes your words along its times",
+      ly.align(["one", "two", "three", "four"], [(10.0, "xx"), (12.0, "yy")])[0][0] >= 10.0 and ly.align(["one", "two", "three", "four"], [(10.0, "xx"), (12.0, "yy")])[-1][0] <= 12.0)
+snapped = ly.snap_to_onsets([(1.20, "a"), (1.25, "b"), (3.0, "c"), (5.0, "d")], [1.0, 1.1, 3.1, 9.0])
+check("lyrics: each word moves to the first voice onset within 0.25 s, keeps its order (never at or before the word before), and stays put with no onset near",
+      [t for t, _ in snapped] == [1.0, 1.1, 3.1, 5.0] and ly.snap_to_onsets([(2.0, "x")], None) == [(2.0, "x")])
+check("lyrics: words are cleaned for the voice model (case, punctuation, hyphens)", ly.tokens("Black-out, DON'T stop!") == ["Black", "out", "DON'T", "stop"])
 
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)

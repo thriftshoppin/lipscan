@@ -103,6 +103,8 @@ The manifest lists your own files (keep them private, like packs):
 
 A line can also carry a source video, so a live test plays next to its footage: add `"video": "/pack/live/trace/"` (a LipScan trace folder), `"label"` (text shown under the menus) and `"noMood": true` (don't apply a mood preset). Without `"clip"`, A is the whole curve file.
 
+A line can also carry the pieces for the live features (head sources, dials, a lyrics box): `"hybrid"` (the trace folder), `"words"` (its timed words), `"profile"`, `"sources": {"video": ..., "hybrid": ..., "audio": ...}`, and `"moodA": true` to hold the mood on head A too. The whole recipe, with a full example, is in [../docs/USING_THE_VIEWER.md](../docs/USING_THE_VIEWER.md).
+
 **From a URL.** When served over http (`node serve.mjs`, with `LIPSCAN_PACKS` and `LIPSCAN_DATA` set; this computer only), files can be given in the address:
 
 ```

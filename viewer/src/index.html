@@ -101,6 +101,13 @@
         <div class="row" title="How much the cheeks, lip puff, nose and chin follow the lips and jaw. 1.0 is as measured."><label style="width:100%">Cheek / jaw follow <output id="cpOut">1.00</output><input type="range" id="dialCp" min="0" max="2" step="0.05" value="1" style="width:100%"></label></div>
         <div class="row"><button id="dialReset">Reset to 1.0</button><span id="dialInfo" style="font-size:12px"></span></div>
       </div>
+      <div id="lyricsBox" hidden>
+        <h2>Lyrics</h2>
+        <div class="row" style="font-size:12px" title="Speech-to-text hears a sung song loosely, but its word times are still a good clock. Your words are lined up to what it heard, so each one gets a time, and both heads use them: the consonants (b, p, m, k, g, w, sh...) land on your words. Paste the whole song, repeated choruses included.">Paste the words; they are lined up to the speech-to-text times.</div>
+        <textarea id="lyricsText" rows="9" spellcheck="false" placeholder="Paste the lyrics here, the whole song with the repeats" style="width:100%;box-sizing:border-box;font:12px/1.4 system-ui,sans-serif;background:var(--bg2,#1b1b1f);color:inherit;border:1px solid #444;border-radius:4px;padding:6px"></textarea>
+        <div class="row"><button id="lyricsApply">Use these lyrics</button><button id="lyricsReset">Back to speech-to-text</button></div>
+        <div id="lyricsInfo" style="font-size:12px"></div>
+      </div>
     </div>
     <h2>Character</h2>
     <div id="info">No character loaded.</div>

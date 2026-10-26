@@ -1073,6 +1073,40 @@ function dialsChanged() { setDialLabels(); clearTimeout(liveTimer); liveTimer = 
 for (const id of ["dialArt", "dialExp", "dialCp"]) $(id).oninput = dialsChanged;
 $("dialReset").onclick = () => { for (const id of ["dialArt", "dialExp", "dialCp"]) $(id).value = 1; dialsChanged(); };
 
+// Lyrics typed by the user: the dev server lines them up to the speech-to-text word times and rewrites the folder's word files, then both
+// voice-based heads are generated again.
+async function lyricsCall(url, init, ok) {
+  $("lyricsInfo").textContent = "working…";
+  try {
+    const r = await fetch(url, init);
+    if (!r.ok) throw new Error(await r.text());
+    const res = await r.json();
+    $("lyricsInfo").textContent = ok(res);
+    await regenerate();
+  } catch (e) { $("lyricsInfo").textContent = String(e.message || e).slice(0, 160); }
+}
+$("lyricsApply").onclick = () => {
+  const text = $("lyricsText").value;
+  if (!live || !text.trim()) return;
+  lyricsCall(`/api/lyrics?folder=${encodeURIComponent(live.line.hybrid)}`, { method: "POST", body: text },
+    (r) => `Using your ${r.words} words (${r.matched} of them heard the same by speech-to-text, the rest placed between), ${r.first.toFixed(1)} s to ${r.last.toFixed(1)} s.`);
+};
+$("lyricsReset").onclick = () => {
+  if (!live) return;
+  lyricsCall(`/api/lyrics?folder=${encodeURIComponent(live.line.hybrid)}&reset=1`, {}, () => "Back to the speech-to-text words.");
+};
+async function showLyrics(l) {
+  const on = !!(live && l.hybrid && l.words);
+  $("lyricsBox").hidden = !on;
+  if (!on) return;
+  $("lyricsInfo").textContent = "";
+  $("lyricsText").value = "";
+  try {                                                 // the lyrics last used with this clip, if any
+    const r = await fetch(l.hybrid.replace(/\/?$/, "/") + "lyrics.txt", { cache: "no-store" });
+    if (r.ok) { $("lyricsText").value = await r.text(); $("lyricsInfo").textContent = "Showing the lyrics last used here (the heads use them unless you went back to speech-to-text)."; }
+  } catch {}
+}
+
 let demoBusy = false;
 async function loadDemo() {
   if (demoBusy) return;
@@ -1120,7 +1154,8 @@ async function loadDemo() {
         setDialLabels();
       }
     }
-    $("moodA").checked = false;
+    await showLyrics(l);
+    $("moodA").checked = !!l.moodA;                       // a line may hold the mood on head A too (its face comes from a video)
     $("moodB").checked = !l.noMood;
     setMood(!l.noMood && l.mood && moods[l.mood] ? l.mood : "neutral");
     $("viewMode").value = "AB";

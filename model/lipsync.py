@@ -143,6 +143,7 @@ LIPS_BY_VISEME = {
 }
 
 VOWELS = {"OO", "O", "EE", "EH", "AA", "UH"}
+ROUNDED = {"W", "OO", "O", "R"}      # sounds that purse the lips
 CONS_FRAMES = 3   # about how long one consonant lasts (frames at 30 fps)
 
 # Shortest time (frames at 30 fps) a shape is held, so it reads on screen.
@@ -564,10 +565,15 @@ def diction_tracks(placed, n, cfg, fps=FPS, quiet=None, art=1.0):
     falls in a pause."""
     tracks, jaw_scale = {}, [1.0] * n
     lead = round(cfg["shape_lead_ms"] * fps / 1000)
+    press_lead = round(cfg.get("closure_lead_ms", 0) * fps / 1000)      # a lip press comes before the sound it belongs to (sung words: ~0.17 s early)
     ts = time_scale(art)
-    art_tracks = {name for v in ART_CLASSES for name in VISEMES[v]}      # tracks the articulated sounds drive
-    for vis, start, end in placed:
-        shape = VISEMES[vis]
+    art_tracks = {name for v in ART_CLASSES for name in VISEMES[v]} | set(cfg.get("velar_lips") or ())      # tracks the articulated sounds drive
+    for idx, (vis, start, end) in enumerate(placed):
+        # k, g, hard c and q have no lip shape in the game's data. A profile's "velar_lips" gives them one (singing: the corners lift and the
+        # upper lip rises, what one close-up singing video did at hard k/g, scaled up because a loosely timed window averages the peak away)
+        shape = cfg["velar_lips"] if vis == "K" and cfg.get("velar_lips") else VISEMES[vis]
+        if vis == "K" and cfg.get("velar_lips") and idx + 1 < len(placed) and placed[idx + 1][0] in ROUNDED:
+            shape = {k: v for k, v in shape.items() if "corner" not in k}     # "qu": the burst, then the lips round (the lift would fight the purse)
         if vis == "BMP" and end - start > 1:                  # a press is a peak, not a plateau
             mid = (start + end + 1) // 2
             start, end = mid - 1, mid
@@ -577,7 +583,8 @@ def diction_tracks(placed, n, cfg, fps=FPS, quiet=None, art=1.0):
         short = hold - (end - start + 1)                     # too brief to read on screen: widen around its centre
         if short > 0:
             start, end = start - short // 2, end + short - short // 2
-        for f in range(max(0, start - lead), min(n, end + 1 - lead)):
+        ld = lead + (press_lead if vis == "BMP" else 0)
+        for f in range(max(0, start - ld), min(n, end + 1 - ld)):
             for name, value in shape.items():
                 if name == "jaw":
                     jaw_scale[f] = min(jaw_scale[f], value) if value < 1 else max(jaw_scale[f], value)
@@ -998,17 +1005,18 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
     db = normalize(loudness_db(samples, rate), cfg["normalize_to_db"])
     n = len(db)
     jaw = jaw_curve(db, cfg)
-    tracks = {}
+    tracks, velar = {}, {}
     if words or text:
         placed = place_timed_words(words, db) if words else place_visemes(text_to_visemes(text), db)
         # a pause: more than 2 frames from any sound
         loud = [d > cfg["normalize_to_db"] - 30 for d in db]
         quiet = [not any(loud[max(0, f - 2):f + 3]) for f in range(n)]
         tracks, jaw_scale = diction_tracks(placed, n, cfg, quiet=quiet, art=art)
+        velar = {k: tracks[k] for k in (cfg.get("velar_lips") or ()) if k in tracks}      # the k/g burst alone, for a hybrid to add to a video's lips
         jaw = [min(1.0, j * s) for j, s in zip(jaw, jaw_scale)]
         tracks.update(tongue_tracks(placed, n, loud, cfg, art=art))
         if cfg.get("lip_mode") == "learned":              # soft, blended lips; p/b/m presses stay sharp
-            sharp = {k: tracks[k] for k in SHARP_LIPS if k in tracks}   # f/v tuck stays a crisp shape too
+            sharp = {k: tracks[k] for k in SHARP_LIPS + tuple(cfg.get("velar_lips") or ()) if k in tracks}   # f/v tuck and the k/g burst stay crisp too
             for k in [k for k in tracks if k.startswith("lips_") and k not in CLOSURE]:
                 del tracks[k]
             soft = lip_tracks(placed, n, loud, cfg, art=art)
@@ -1099,6 +1107,8 @@ def simulate_lipsync(wav_path, text=None, profile="speech", seed=1, words=None, 
            "tracks": {k: [round(v, 4) for v in vals] for k, vals in sorted(tracks.items())}}
     if head:
         out["head"] = {k: [round(v, 2) for v in vals] for k, vals in head.items()}
+    if velar:
+        out["velar"] = {k: [round(v, 4) for v in vals] for k, vals in velar.items()}
     if mood_info:
         out["mood"] = mood_info
     return out

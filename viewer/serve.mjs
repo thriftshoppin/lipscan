@@ -5,9 +5,12 @@
 //   /api/gen    -> runs the LipScan model again with the sliders' settings (needs Python: LIPSCAN_PY, and the repo: LIPSCAN_REPO)
 //        ?mode=voice&wav=/pack/x.wav[&text=..][&words=/pack/x-words.json][&profile=speech][&rig=/pack/c/character.json]&articulation=1&expressiveness=1&coupling=1
 //        ?mode=hybrid&folder=/pack/live/clip/ ...the same settings  (a LipScan trace folder: the video's head and brows, the voice's mouth)
+//   /api/lyrics -> POST the lyrics as the body, ?folder=/pack/live/clip/ : lines them up to the speech-to-text times and writes the folder's
+//                  words-timed.json and captions.json (analyze/lyrics.py); ?reset=1 puts the speech-to-text words back
 import http from "node:http";
 import { execFile } from "node:child_process";
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, statSync, writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, normalize, extname, resolve, sep } from "node:path";
 
 const roots = { "": resolve("dist"), pack: resolve(process.env.LIPSCAN_PACKS || "."), data: resolve(process.env.LIPSCAN_DATA || ".") };
@@ -30,6 +33,7 @@ function gen(q, res) {
     const folder = local(q.get("folder"));
     if (!folder) return res.writeHead(400).end("bad folder");
     args = [join(repo, "retarget", "retarget.py"), folder, "--out", "-", ...flags];
+    if (q.get("profile")) args.push("--profile", String(q.get("profile")).replace(/[^\w.-]/g, ""));     // the hybrid's voice side
   } else {
     const wav = local(q.get("wav"));
     if (!wav) return res.writeHead(400).end("bad wav");
@@ -44,9 +48,26 @@ function gen(q, res) {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(out);
   });
 }
+function lyrics(req, q, res) {
+  const folder = local(q.get("folder"));
+  if (!folder) return res.writeHead(400).end("bad folder");
+  const run = (args) => execFile(py, [join(repo, "analyze", "lyrics.py"), ...args], { timeout: 60000 }, (err, out, errout) => {
+    if (err) return res.writeHead(500).end(String(errout || err).slice(-400));
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(out);
+  });
+  if (q.get("reset")) return run(["reset", folder]);
+  let body = "";
+  req.on("data", (c) => { body += c; if (body.length > 200000) req.destroy(); });
+  req.on("end", () => {
+    const file = join(mkdtempSync(join(tmpdir(), "lipscan-lyrics-")), "lyrics.txt");
+    writeFileSync(file, body, "utf8");
+    run(["apply", folder, file]);
+  });
+}
 http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
   if (u.pathname === "/api/gen") return gen(u.searchParams, res);
+  if (u.pathname === "/api/lyrics" && (req.method === "POST" || u.searchParams.get("reset"))) return lyrics(req, u.searchParams, res);
   const url = decodeURIComponent(u.pathname);
   const [, first, ...rest] = url.split("/");
   const [root, parts] = first && Object.hasOwn(roots, first) ? [roots[first], rest] : [roots[""], [first, ...rest]];
