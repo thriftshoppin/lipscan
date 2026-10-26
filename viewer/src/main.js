@@ -854,6 +854,7 @@ window.addEventListener("keydown", (e) => {
   else if (k === "4") viewFrom(-90, 1.0);
   else if (k === "0") { const t = controls.target; camera.position.set(t.x - 0.2, t.y + 0.02, t.z - 0.85); camera.lookAt(t); }
   else if (k === "v") { setVideoShown(!$("showVideo").checked); return; }
+  else if (k === "p") { $("hairPhys").checked = !$("hairPhys").checked; return; }          // hair physics on / off
   else return;
   $("frontCam").checked = k === "1";
 });
