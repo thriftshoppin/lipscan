@@ -308,6 +308,60 @@ def closures_from_gap(gap):
     return press
 
 
+SEAL_SHUT, SEAL_MIN, SEAL_HELD = 0.03, 2, 0.4       # video lip gap under SEAL_SHUT for SEAL_MIN frames or more; a held seal presses at SEAL_HELD
+
+
+def seal_from_video(tracks, gap, video, held=SEAL_HELD):
+    """Hard-code the video's lip closure. Wherever the video's lips are shut (gap under SEAL_SHUT for at least SEAL_MIN frames, face
+    seen) the head's mouth is the video's, whatever the sound says: the voice-driven lip shapes, the upper lip and the jaw fall back
+    to what the video reads, so a backing vocal or a band the singer is not singing along to cannot move a closed mouth. A shut run
+    longer than a consonant (over CLOSE_MAXLEN frames, a held mouth) also gets a gentle seal on lips_together (AUTHORED, not
+    measured), so the lips meet. Outside shut frames nothing changes. On one close-up singing video the lips were shut in 22% of the
+    frames, and the voice's lip shapes still leaked into 7% of them (corner stretch over 0.15). held 0 skips the seal."""
+    if gap is None or video is None or "jaw_mid_open" not in tracks:
+        return tracks
+    n = len(gap)
+    shut = np.nan_to_num(gap, nan=1.0) < SEAL_SHUT
+    keep = np.zeros(n, bool)                                         # runs of SEAL_MIN frames or more
+    held_run = np.zeros(n, bool)
+    i = 0
+    while i < n:
+        if shut[i]:
+            j = i
+            while j < n and shut[j]:
+                j += 1
+            if j - i >= SEAL_MIN:
+                keep[i:j] = True
+                if j - i > CLOSE_MAXLEN:
+                    held_run[i:j] = True
+            i = j
+        else:
+            i += 1
+    if not keep.any():
+        return tracks
+    for k in list(tracks):
+        if k.startswith("lips_") and is_speech_track(k) and "together" not in k:
+            cur = np.array(tracks[k], dtype=float)
+            m = min(n, len(cur))
+            v = video.get(k)
+            back = np.zeros(m) if v is None else np.nan_to_num(np.array(v[:m], dtype=float))
+            cur[:m] = np.where(keep[:m], back, cur[:m])
+            tracks[k] = cur
+    vj = video.get("jaw_mid_open")
+    jaw = np.array(tracks["jaw_mid_open"], dtype=float)
+    m = min(n, len(jaw))
+    vjaw = np.zeros(m) if vj is None else np.nan_to_num(np.array(vj[:m], dtype=float))
+    jaw[:m] = np.where(keep[:m], np.minimum(jaw[:m], vjaw), jaw[:m])
+    tracks["jaw_mid_open"] = jaw
+    if held > 0:
+        for k in ("lips_together_up", "lips_together_dn"):
+            cur = np.array(tracks.get(k, np.zeros(n)), dtype=float)
+            m = min(n, len(cur))
+            cur[:m] = np.where(held_run[:m], np.fmax(np.nan_to_num(cur[:m]), held), cur[:m])
+            tracks[k] = cur
+    return tracks
+
+
 GATE_SEEN, GATE_NEAR = 0.035, 3       # a voice closure needs the video's lip gap under GATE_SEEN (his real closures: under 0.025) within GATE_NEAR frames
 
 
@@ -493,7 +547,7 @@ def jl(a, nd=4):
 
 
 def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hybrid=True, size=True, mouth_from="auto",
-             articulation=None, expressiveness=None, coupling=1.0, jaw_presence=1.0, profile="speech", round_split=1.0, gap_fill=1.0, video_diction=True, lower_teeth=0.3, jaw_forward=0.25, reinforce=True):
+             articulation=None, expressiveness=None, coupling=1.0, jaw_presence=1.0, profile="speech", round_split=1.0, gap_fill=1.0, video_diction=True, lower_teeth=0.3, jaw_forward=0.25, reinforce=True, seal=True):
     folder = os.path.abspath(folder)
     perf = json.load(open(os.path.join(folder, "performance.json"), encoding="utf-8"))
     if perf.get("format") != "lipscan-performance/1":
@@ -524,6 +578,7 @@ def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hy
         led = mouth_from == "video" or (mouth_from == "auto" and video_mouth_trusted(chan["jawOpen"]))
         import lipsync
         follow = lipsync.load_profile(profile).get("follow_jaw") if led else None
+        video_tracks = {k: v.copy() for k, v in tracks.items()}                # what the video alone reads, for the seal below
         tracks = hybrid_tracks(tracks, voice, mouth_size(chan["jawOpen"]) if size else None, led, follow, reinforce)
         mode = "hybrid"
         base["hybrid"] = {"mouth": ("jaw, lower lip, upper lip and chin from the video; " if led else "") + "voice model"
@@ -538,6 +593,8 @@ def retarget(folder, mapping_path=DEFAULT_MAPPING, export="raw", tongue=True, hy
         tracks = apply_video_closures(tracks, chan["lipGap"], replace=(mode == "hybrid" and not reinforce))      # diction from his own lips, with the voice's added on top
     tracks = fill_lip_gap(tracks, chan.get("lipGap"), gap_fill)
     tracks = lower_lip_to_jaw(tracks, lower_teeth)
+    if mode == "hybrid" and seal and video_diction and video_mouth_trusted(chan["jawOpen"]) and "lipGap" in chan:
+        tracks = seal_from_video(tracks, chan["lipGap"], video_tracks)                  # a shut mouth in the video is shut on the head
     tracks = jaw_forward_with_opening(tracks, jaw_forward)
     tracks = add_coupling(tracks, n, coupling, jaw_presence)
     base["settings"] = {"articulation": articulation, "expressiveness": expressiveness, "coupling": coupling, "jaw_presence": jaw_presence}
@@ -575,6 +632,7 @@ def main():
     ap.add_argument("--jaw-forward", type=float, default=0.25, help="how far the jaw slides forward as it lowers (0-1, authored not measured; "
                     "0 = straight down, default 0.25)")
     ap.add_argument("--no-reinforce", action="store_true", help="(hybrid) the voice takes over the lip shapes and closures instead of adding to the video's")
+    ap.add_argument("--no-seal", action="store_true", help="(hybrid) don't force the head's mouth to the video's wherever the video's lips are shut")
     ap.add_argument("--no-video-diction", action="store_true", help="don't take the p/b/m closures from the video's lip gap when the video reads the mouth well "
                     "(the voice model's word-placed closures are used)")
     ap.add_argument("--no-size", action="store_true", help="(hybrid) don't scale the voice's jaw and lips by the mouth size seen in the video")
@@ -587,7 +645,7 @@ def main():
                    articulation=a.articulation, expressiveness=a.expressiveness, coupling=min(2.0, max(0.0, a.coupling)),
                    jaw_presence=min(1.3, max(0.7, a.jaw_presence if a.jaw_presence is not None else rig_presence(a.rig))), profile=a.profile,
                    round_split=min(1.0, max(0.0, a.round_split)), gap_fill=min(1.0, max(0.0, a.gap_fill)), video_diction=not a.no_video_diction,
-                   lower_teeth=min(1.0, max(0.0, a.lower_teeth)), jaw_forward=min(1.0, max(0.0, a.jaw_forward)), reinforce=not a.no_reinforce)
+                   lower_teeth=min(1.0, max(0.0, a.lower_teeth)), jaw_forward=min(1.0, max(0.0, a.jaw_forward)), reinforce=not a.no_reinforce, seal=not a.no_seal)
     if a.out == "-":
         json.dump(res, sys.stdout)
         return

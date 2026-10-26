@@ -909,7 +909,38 @@ async function filesFromDrop(dt) {
   else out.push(...dt.files);
   return out;
 }
+// A dropped video becomes a finished demo: the dev server runs the whole pipeline (/api/import), this shows the steps, then reloads the list.
+async function importVideo(f) {
+  const bar = $("importBar");
+  const say = (t, bad) => { bar.hidden = false; bar.textContent = t; bar.style.borderColor = bad ? "#b91c1c" : ""; };
+  if (location.protocol === "file:") return say("Dropping a video needs the dev server (http://127.0.0.1:8770/).", true);
+  const profile = $("dropProfile").value;
+  say(`Sending ${f.name}…`);
+  const sent = await new Promise((ok) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", `/api/import?name=${encodeURIComponent(f.name)}&profile=${profile}`);
+    x.setRequestHeader("X-LipScan", "1");
+    x.upload.onprogress = (e) => e.lengthComputable && say(`Sending ${f.name}… ${Math.round(100 * e.loaded / e.total)}%`);
+    x.onload = () => ok(x.status === 200 ? JSON.parse(x.responseText).job : null);
+    x.onerror = () => ok(null);
+    x.send(f);
+  });
+  if (!sent) return say("The server did not take the video.", true);
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const j = await fetch(`/api/import?job=${sent}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+    if (!j) return say("Lost the server.", true);
+    if (j.state === "failed") return say(`Failed at "${j.step}": ${j.error}`, true);
+    if (j.state === "done") break;
+    say(`${f.name}: step ${j.n}/${j.of}, ${j.step}…`);
+  }
+  await startDemo(demoUrl);
+  say(`${f.name} is ready: the first entry in the test set.`);
+  setTimeout(() => { bar.hidden = true; }, 8000);
+}
 async function handleFiles(files) {
+  const vids = files.filter((f) => /\.(mp4|mov|m4v|webm|mkv|avi)$/i.test(f.name));
+  if (vids.length) { files = files.filter((f) => !vids.includes(f)); for (const v of vids) await importVideo(v); }
   const charFiles = files.filter((f) => /^character\.json$/i.test(f.name) || /^(head|eyebrows|eyes|teeth|.+)\.(glb|png)$/i.test(f.name) && files.some((x) => /^character\.json$/i.test(x.name)));
   if (charFiles.some((f) => /^character\.json$/i.test(f.name))) await loadCharacter(charFiles);
   let rest = files.filter((f) => !charFiles.includes(f));
@@ -980,7 +1011,9 @@ async function loadPackUrl(url) {
 // ---------------- demo: a test set of characters and lines (?demo=manifest.json) ----------------
 // manifest: {characters: [{name, pack, creator?, lines: [{text, game, clip, lipscan, audio, mood}]}]}
 let demo = null;
+let demoUrl = "/pack/demo/manifest.json";
 async function startDemo(url) {
+  demoUrl = url;
   demo = await (await fetch(url)).json();
   $("demoBox").hidden = false;
   const cs = $("demoChar");

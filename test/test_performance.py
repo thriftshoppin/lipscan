@@ -519,6 +519,20 @@ head = "base\\characters\\main_npc\\kerry_eurodyne\\h0_001_ma_c__kerry_eurodyne\
 check("hair: the character's plain hair mesh is chosen over the young and common variants, and a head with none gives None",
       bh.find_hair(FakeGame(listing), head).endswith("hh_053_ma__kerry_eurodyne.mesh") and bh.find_hair(FakeGame([]), head) is None)
 
+# ---- a shut mouth in the video is shut on the head ----
+N = 30
+sgap = np.full(N, 0.1); sgap[5:8] = 0.0; sgap[12] = 0.0; sgap[16:28] = 0.0          # a short run, one noisy frame, a held run
+sv = {"lips_l_stretch": np.zeros(N), "jaw_mid_open": np.full(N, 0.02)}
+st = {"jaw_mid_open": np.full(N, 0.5), "lips_l_stretch": np.full(N, 0.4), "lips_apart_up": np.full(N, 0.3), "lips_l_corner_up": np.full(N, 0.6),
+      "lips_together_up": np.zeros(N), "lips_together_dn": np.zeros(N)}
+sealed = rt.seal_from_video({k: v.copy() for k, v in st.items()}, sgap, sv)
+check("seal: where the video's lips are shut for 2+ frames the voice's lip shapes and jaw fall back to the video's; elsewhere nothing changes",
+      sealed["jaw_mid_open"][6] == 0.02 and sealed["lips_l_stretch"][6] == 0.0 and sealed["lips_apart_up"][6] == 0.0 and sealed["jaw_mid_open"][20] == 0.02
+      and sealed["jaw_mid_open"][10] == 0.5 and sealed["lips_l_stretch"][12] == 0.4 and sealed["lips_apart_up"][2] == 0.3)
+check("seal: a smile (corners up) is the video's and stays; a held shut mouth is sealed at the gentle level, a short one is left to the closure code",
+      sealed["lips_l_corner_up"][20] == 0.6 and sealed["lips_together_up"][20] == rt.SEAL_HELD and sealed["lips_together_up"][6] == 0.0
+      and rt.seal_from_video({k: v.copy() for k, v in st.items()}, None, sv)["jaw_mid_open"][6] == 0.5)
+
 # ---- typed lyrics: lined up to the speech-to-text word times ----
 import lyrics as ly  # noqa: E402
 heard = [(1.0, "I'm"), (1.3, "driving"), (2.5, "black"), (6.0, "angel"), (6.4, "left"), (6.9, "my"), (7.3, "riding"), (7.8, "angle")]

@@ -82,6 +82,7 @@
     <div id="videoPane" hidden><img id="videoImg" alt="Source video frame"><div id="videoNote"></div><button id="videoHide" title="Hide the video (V)" style="position:absolute;top:4px;right:4px;padding:1px 7px;opacity:.75">Hide</button></div>
     <div id="drop"><div><b>Drop files here</b><br>a character folder (character.json + .glb meshes),<br>then an animation: a WolvenKit <code>.anims</code> glTF export or a LipScan <code>.json</code>,<br>and optionally the voice audio.</div></div>
   </div>
+  <div id="importBar" hidden style="position:fixed;left:50%;bottom:44px;transform:translateX(-50%);z-index:9;padding:8px 14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 4px 18px #0005;max-width:80vw"></div>
   <aside>
     <div id="demoBox" hidden>
       <h2>Test set</h2>
@@ -89,6 +90,7 @@
       <div class="row"><select id="demoLine" style="max-width:100%"></select></div>
       <div class="row"><button id="demoPrev">◀ Prev</button><button id="demoNext">Next ▶</button></div>
       <div id="demoText" style="font-size:12px;margin:4px 0"></div>
+      <div class="row" title="Drop a video file anywhere on the stage and it is scanned and added to this list by itself. Say what it is first."><label>Dropped video is <select id="dropProfile"><option value="singing-hard">singing</option><option value="speech">speech</option></select></label></div>
       <div id="srcBox" hidden>
         <h2>Head sources</h2>
         <div class="row" title="Video only: everything from his face. Video + audio: the hybrid (head, brows and, where the video reads well, the mouth from the video; closures, tongue and neck from the voice). Audio only: the voice model, no video. With music in the audio, the audio-only head is a poor guide."><label>Head A <select id="srcA"></select></label></div>

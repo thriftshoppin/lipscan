@@ -22,7 +22,22 @@ set LIPSCAN_DATA=D:\lipscan\packs
 node serve.mjs                                  (then open http://127.0.0.1:8770/)
 ```
 
+For the video drop zone below, also set the two optional tools (without them it still runs, but with no vocal separation or no words):
+
+```
+set LIPSCAN_SEP_PY=C:\path\to\separate-venv\Scripts\python.exe   (Python with demucs, see IMPORTING.md step 4)
+set LIPSCAN_ASR=C:\path\to\asr                  (a folder with transcribe.mjs, Whisper through transformers.js, and its node_modules)
+```
+
+`LIPSCAN_PY` also needs `av` (`pip install av opencv-python numpy`) for the drop zone.
+
 Opening `dist\lipscan-viewer.html` directly also works for playing files, without the model features.
+
+## Drop a video, get a demo
+
+With the dev server running (and the manifest at `LIPSCAN_PACKS\demo\manifest.json`, the one the viewer opened with `?demo=/pack/demo/manifest.json`), drop a video file anywhere on the stage. In the Test set panel say whether it is **singing** or **speech** first. A bar at the bottom shows the step (reading the video, tracking the face, pulling the voice out of the music, listening for words, timing the words, three retargets, adding it to the list). It takes several minutes for a song (about 8 for a 4.5 minute video on one CPU/GPU box). When it is done the list reloads and the new entry, "Dropped: <file name> on Kerry", is first. The files go to `LIPSCAN_PACKS\live\<file name>\`. Dropping the same name twice makes `name-2`. A video with no sound track fails at step 1.
+
+The same steps run by hand: `python ingest.py video.mp4 "<packs>\live\clip" "title" --manifest "<packs>\demo\manifest.json" --profile singing-hard`.
 
 ## Put your video in a test set
 
@@ -111,4 +126,5 @@ For the best result, upload a take where **all of the vocals** are voiced and th
 | Lips press shut on w, sh or uh | make sure you are on the hybrid (it keeps a voice press only where the video's lips meet); on the voice-only head the press follows the words |
 | Consonants early or late | paste the lyrics, so each word snaps to the voice; run `separate.py` so it listens to the vocals, not the band |
 | Hard k, g, c, q do nothing on the lips | use `--profile singing-hard` |
+| Dropping a video does nothing, or fails | open the viewer from `http://127.0.0.1:8770/` (not the .html file); the failure bar names the step; check `LIPSCAN_PY` has `av`, `LIPSCAN_SEP_PY` and `LIPSCAN_ASR` |
 | The dials do nothing | the dev server isn't running, or the line has no `hybrid`/`audio` |

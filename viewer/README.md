@@ -124,6 +124,7 @@ How it works (the solver, the file formats, head motion): see `../claude/skills/
 | `src/anims.js` | Loads WolvenKit `.anims` glTF exports and LipScan curve files. |
 | `src/main.js`, `src/index.html` | The app: scene, A/B view, timeline, pose tester, video pane, address parameters. |
 | `build.mjs` | Bundles everything with three.js (MIT) into one HTML file. |
-| `serve.mjs` | Optional local dev server (127.0.0.1 only). |
+| `serve.mjs` | Optional local dev server (127.0.0.1 only), including `/api/import` for dropped videos. |
+| `ingest.py` | The whole video-to-demo pipeline the drop zone runs (see docs/USING_THE_VIEWER.md). |
 
 MIT licensed, like the rest of LipScan. Not affiliated with CD PROJEKT RED. Cyberpunk 2077 is a trademark of CD PROJEKT S.A.
