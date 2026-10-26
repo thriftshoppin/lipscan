@@ -57,7 +57,24 @@ const MATERIALS = {
   eyes: () => new THREE.MeshStandardMaterial({ color: 0xe9e6e0, roughness: 0.25 }),
   teeth: () => new THREE.MeshStandardMaterial({ color: 0xeee6d2, roughness: 0.4 }),
   other: () => new THREE.MeshStandardMaterial({ color: 0x8c8580, roughness: 0.7 }),
+  hair: () => hairMaterial(),
 };
+
+// Hair is a set of cards (the game's own hair meshes) cut out by a strand alpha texture, in the hair profile's average colour. A spring
+// simulation of the head's motion (stepHair) gives a displacement that this shader adds to the vertices, more for the outer, longer cards.
+function hairMaterial() {
+  const color = (state.pack && state.pack.hair && state.pack.hair.color) || "#2b2420";
+  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.78, side: THREE.DoubleSide });
+  m.userData.hairOffset = { value: new THREE.Vector3() };
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uHairOff = m.userData.hairOffset;
+    sh.vertexShader = sh.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute float hairW;\nuniform vec3 uHairOff;")
+      .replace("#include <skinning_vertex>", "#include <skinning_vertex>\ntransformed += uHairOff * hairW;");
+  };
+  m.customProgramCacheKey = () => "hair-sway";
+  return m;
+}
 
 // One plain color per vertex, chosen by the bone that moves it most (the teeth mesh holds teeth, gums and tongue).
 function colorByBone(mesh, pick) {
@@ -80,7 +97,7 @@ function colorByBone(mesh, pick) {
 
 // ---------------- the game's textures (build_textures.py adds them to a pack; optional) ----------------
 // pack.textures: [{role, slot, file}]: role head or eyes, slot map (albedo), normalMap or roughnessMap. Only used when the pack has them.
-const TEX_SLOTS = ["map", "normalMap", "roughnessMap"];
+const TEX_SLOTS = ["map", "normalMap", "roughnessMap", "alphaMap"];
 async function loadTextures(pack, byName) {
   const out = {};
   const loader = new THREE.TextureLoader();
@@ -102,7 +119,7 @@ async function loadTextures(pack, byName) {
 }
 // Which meshes of a role take the texture: the head; the eyeball and its lash line, not the thin see-through overlay.
 function takesTexture(role, mesh) {
-  return role === "head" || role === "eyebrows" || role === "teeth" || (role === "eyes" && !/doubled/i.test(mesh.name) && mesh.geometry.attributes.position.count >= 300);   // the eyeball, not the lash line
+  return role === "head" || role === "eyebrows" || role === "teeth" || role === "hair" || (role === "eyes" && !/doubled/i.test(mesh.name) && mesh.geometry.attributes.position.count >= 300);   // the eyeball, not the lash line
 }
 // The game's eye texture is a flat picture of one eye (pupil, iris, veined white) on a skin-coloured surround, and its material
 // rescales the mesh's UVs. Each eyeball is mapped to it from the front instead: the picture's centre on the eye's centre, 0.27 of
@@ -136,6 +153,15 @@ function applyTextures(mesh, role) {
     return;
   }
   if (!tex || !takesTexture(role, mesh)) return;
+  if (role === "hair") {                                   // cards are only hair through their strand alpha: without it they would be slabs
+    const ok = $("showTex").checked && !!tex.alphaMap;
+    const hm = mesh.material;
+    hm.alphaMap = ok ? tex.alphaMap : null;
+    hm.alphaTest = ok ? 0.4 : 0;
+    hm.visible = ok && $("showHair").checked;
+    hm.needsUpdate = true;
+    return;
+  }
   if (role === "eyes") mapEyeUV(mesh);
   const on = $("showTex").checked;
   const m = mesh.material;
@@ -220,6 +246,68 @@ async function buildHead(slot) {
   return holder;
 }
 
+// ---------------- hair physics ----------------
+// One point that trails the head on a spring (the lower part of the hair, in the head's own frame, so it lags turns and nods as well as
+// moves). Its lag behind the point it follows is the sway, applied to each vertex by its weight: how far it sits from the head's centre
+// (roots near the skull barely move, outer cards and tips most), scaled by how long the hair is (the spread of those distances).
+const HAIR = { stiffness: 110, damping: 0.4, limit: 0.06, gain: 1.6 };
+function setupHair(holder) {
+  const meshes = [];
+  holder.traverse((o) => { if (o.isMesh && o.userData.role === "hair" && o.geometry.attributes.position) meshes.push(o); });
+  const headB = holder.userData.bones.find((b) => b.bone.name === "Head");
+  holder.userData.hair = null;
+  if (!meshes.length || !headB) return;
+  const H0 = new THREE.Vector3().setFromMatrixPosition(headB.restWorld), v = new THREE.Vector3();
+  const rs = [], low = [];
+  for (const m of meshes) {
+    const p = m.geometry.attributes.position;
+    for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); rs.push(v.distanceTo(H0)); low.push(v.y); }
+  }
+  const sorted = [...rs].sort((a, b) => a - b), at = (f) => sorted[Math.min(sorted.length - 1, Math.floor(f * sorted.length))];
+  const r0 = at(0.05), span = Math.max(1e-3, at(0.97) - r0);
+  const length = THREE.MathUtils.clamp(span / 0.10, 0.25, 1.2);
+  const ys = [...low].sort((a, b) => a - b), yLow = ys[Math.floor(ys.length * 0.15)];
+  const anchor = new THREE.Vector3();
+  let n = 0;
+  for (const m of meshes) {
+    const p = m.geometry.attributes.position, w = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const u = THREE.MathUtils.clamp((v.distanceTo(H0) - r0) / span, 0, 1);
+      w[i] = length * Math.pow(u * u * (3 - 2 * u), 1.5);
+      if (v.y <= yLow) { anchor.add(v); n++; }
+    }
+    m.geometry.setAttribute("hairW", new THREE.BufferAttribute(w, 1));
+  }
+  anchor.multiplyScalar(1 / Math.max(1, n));
+  const local = anchor.applyMatrix4(headB.restWorld.clone().invert());
+  holder.userData.hair = { meshes, bone: headB.bone, local, p: null, v: new THREE.Vector3(), length };
+}
+let frameDt = 0.016;
+function stepHair(holder, dt) {
+  const hs = holder.userData.hair;
+  if (!hs) return;
+  const A = hs.local.clone().applyMatrix4(hs.bone.matrixWorld);
+  const live = $("hairPhys").checked && dt < 0.25;
+  if (!hs.p || !live || hs.p.distanceTo(A) > 0.25) { hs.p = A.clone(); hs.v.set(0, 0, 0); }
+  else {
+    const k = HAIR.stiffness, c = 2 * HAIR.damping * Math.sqrt(k), step = Math.min(dt, 0.1);
+    const sub = Math.max(1, Math.ceil(step / 0.008)), h = step / sub;
+    for (let i = 0; i < sub; i++) {
+      hs.v.addScaledVector(A.clone().sub(hs.p), k * h).addScaledVector(hs.v, -c * h);
+      hs.p.addScaledVector(hs.v, h);
+    }
+  }
+  const d = hs.p.clone().sub(A).multiplyScalar(HAIR.gain);
+  if (d.length() > HAIR.limit) d.setLength(HAIR.limit);
+  const o = new THREE.Vector3();
+  for (const m of hs.meshes) {                             // the displacement is in world space; the shader works in the mesh's own
+    const inv = m.matrixWorld.clone().invert();
+    o.copy(d).applyMatrix4(inv).sub(new THREE.Vector3().applyMatrix4(inv));
+    m.material.userData.hairOffset.value.copy(o);
+  }
+}
+
 function poseHead(head, deform) {
   const m = new THREE.Matrix4();
   for (const x of head.userData.bones) {
@@ -243,6 +331,7 @@ async function loadCharacter(files) {
   for (const s of ["A", "B"]) {
     if (state.heads[s]) scene.remove(state.heads[s]);
     state.heads[s] = await buildHead(s);
+    setupHair(state.heads[s]);
     scene.add(state.heads[s]);
     values[s] = new Float32Array(pack.tracks.length);
   }
@@ -286,7 +375,7 @@ function layout() {
 }
 
 function applyVisibility() {
-  const show = { eyebrows: $("showBrows").checked, eyes: $("showEyes").checked, teeth: $("showTeeth").checked };
+  const show = { eyebrows: $("showBrows").checked, eyes: $("showEyes").checked, teeth: $("showTeeth").checked, hair: $("showHair").checked };
   for (const h of Object.values(state.heads)) {
     if (!h) continue;
     h.traverse((o) => {
@@ -573,6 +662,7 @@ let last = performance.now();
 function tick(now) {
   const dt = (now - last) / 1000;
   last = now;
+  frameDt = dt;
   if (state.playing) {
     if (state.audio && !state.audio.paused && state.t + state.offset >= 0) state.t = state.audio.currentTime - state.offset;
     else state.t += dt * state.speed;
@@ -593,6 +683,7 @@ function render() {
       if (!h || !h.visible) continue;
       sampleValues(s, state.t, values[s]);
       poseHead(h, state.solver.solve(values[s], headAt(s, state.t), state.clip[s] && state.clip[s].headSplit));
+      stepHair(h, frameDt);
       if (s === "A" || !state.heads.A.visible) showActive(s);
     }
   }
@@ -722,7 +813,8 @@ $("videoHide").onclick = () => setVideoShown(false);
 $("clipA").addEventListener("change", (e) => selectClip("A", +e.target.value));
 $("clipB").addEventListener("change", (e) => selectClip("B", +e.target.value));
 $("viewMode").addEventListener("change", () => { if ($("viewMode").value !== "A" && !state.clip.B) $("viewMode").value = "A"; layout(); });
-for (const id of ["showBrows", "showEyes", "showTeeth", "wire"]) $(id).addEventListener("change", applyVisibility);
+for (const id of ["showBrows", "showEyes", "showTeeth", "showHair", "wire"]) $(id).addEventListener("change", applyVisibility);
+$("showHair").addEventListener("change", () => { for (const s of ["A", "B"]) if (state.heads[s]) state.heads[s].traverse((o) => { if (o.isMesh) applyTextures(o, o.userData.role); }); });
 $("frontCam").addEventListener("change", () => {
   const t = controls.target;
   camera.position.set(t.x, t.y, t.z - 0.85);

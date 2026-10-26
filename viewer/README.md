@@ -42,6 +42,14 @@ python build_character.py --wolvenkit "<path>\WolvenKit.CLI.exe" --game "<Cyberp
 
 The pack is a folder with `character.json` plus the head, eyebrows, eyes and teeth `.glb` files. It only reads the game archives; it never changes the game.
 
+### Hair (optional)
+
+```
+python build_hair.py --wolvenkit "<path>\WolvenKit.CLI.exe" --game "<Cyberpunk 2077 folder>" --pack "<the pack folder>"
+```
+
+Finds the character's hair mesh, exports it into the pack (`hair.glb`), takes the strand alpha texture and an average colour from the game's hair profile. Name a mesh with `--hair "<depot path of a hh_ .mesh>"`, or a colour with `--color #rrggbb`. The viewer draws the cards, and a **Hair physics** checkbox lets them trail the head's movement on a spring (a basic simulation: no collisions, gravity or wind). Game data again: keep it on your PC.
+
 ### The game's textures (optional)
 
 ```
@@ -109,6 +117,7 @@ How it works (the solver, the file formats, head motion): see `../claude/skills/
 |---|---|
 | `build_character.py` | Converter: your game files → a private character pack. |
 | `build_textures.py` | Adds the game's skin, eye, eyebrow and teeth textures to a pack, from your install. |
+| `build_hair.py` | Adds the character's hair cards, strand texture and colour to a pack, from your install. |
 | `src/solver.js` | Track values → bone deformations, rebuilt from the facial setup, plus head motion. |
 | `src/anims.js` | Loads WolvenKit `.anims` glTF exports and LipScan curve files. |
 | `src/main.js`, `src/index.html` | The app: scene, A/B view, timeline, pose tester, video pane, address parameters. |

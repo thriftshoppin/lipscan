@@ -471,5 +471,44 @@ check("textures: the brows take the material named default, and nothing that is 
       bt.pick_brows({"Materials": [decal, brow("black_10", "heb__base_d10"), brow("default", "heb__base_d01")]})["Albedo"].endswith("heb__base_d01.xbm")
       and bt.pick_brows({"Materials": [decal]}) == {})
 
+# ---- 0.4.1: hair (viewer/build_hair.py picks the mesh and colour from the game's own resources) ----
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import build_hair as bh  # noqa: E402
+ramp = [{"value": 0.0, "color": {"Red": 0, "Green": 0, "Blue": 0}}, {"value": 1.0, "color": {"Red": 255, "Green": 255, "Blue": 255}}]
+check("hair: a gradient's mean colour is its area (a black to white ramp is mid grey)", all(abs(c - 127.5) < 1 for c in bh.gradient_mean(ramp)))
+
+
+class FakeGame:
+    def __init__(self, listing=(), hp=None):
+        self.listing, self.hp = listing, hp
+
+    def list(self, rx):
+        return [("a", p) for p in self.listing]
+
+    def extract(self, depot):
+        return depot
+
+    def to_json(self, local):
+        return self.hp
+
+
+half = [{"value": 0.0, "color": {"Red": 200, "Green": 100, "Blue": 0}}, {"value": 1.0, "color": {"Red": 200, "Green": 100, "Blue": 0}}]
+grey = [{"value": 0.0, "color": {"Red": 128, "Green": 128, "Blue": 128}}, {"value": 1.0, "color": {"Red": 128, "Green": 128, "Blue": 128}}]
+check("hair: the colour is the root-to-tip mean times the per-strand mean (dark and pale strands make it darker than root-to-tip alone)",
+      bh.profile_color(FakeGame(hp={"gradientEntriesRootToTip": half, "gradientEntriesID": grey}), "x.hp") == "#643200"
+      and bh.profile_color(FakeGame(hp={"gradientEntriesRootToTip": half}), "x.hp") == "#c86400")
+cards = lambda *names: {"Materials": [{"Name": n, "Data": {"HairProfile": "base\\hair\\" + n + ".hp"}} for n in names]}
+check("hair: without a profile named for the character, a natural dark colour is taken, not the first dye colour",
+      bh.natural_profile(cards("liliac_cards", "black_carbon_cards", "cold_white_cards")).endswith("black_carbon_cards.hp")
+      and bh.natural_profile(cards("liliac_cards")).endswith("liliac_cards.hp") and bh.natural_profile({"Materials": []}) is None)
+hair_dir = "base\\characters\\common\\hair\\"
+listing = [hair_dir + "hh_053_ma__kerry_eurodyne_common\\hh_053_ma__kerry_eurodyne_common.mesh",
+           hair_dir + "hh_057_ma__kerry_eurodyne_young\\hh_057_ma__kerry_eurodyne_young.mesh",
+           hair_dir + "hh_053_ma__kerry_eurodyne\\hh_053_ma__kerry_eurodyne.mesh"]
+head = "base\\characters\\main_npc\\kerry_eurodyne\\h0_001_ma_c__kerry_eurodyne\\h0_001_ma_c__kerry_eurodyne_old.mesh"
+check("hair: the character's plain hair mesh is chosen over the young and common variants, and a head with none gives None",
+      bh.find_hair(FakeGame(listing), head).endswith("hh_053_ma__kerry_eurodyne.mesh") and bh.find_hair(FakeGame([]), head) is None)
+
 print(f"{'ALL ' + str(len(results)) + ' PASSED' if all(results) else str(results.count(False)) + ' FAILED'}")
 sys.exit(0 if all(results) else 1)
