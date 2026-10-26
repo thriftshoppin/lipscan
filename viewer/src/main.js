@@ -202,6 +202,22 @@ const state = {
 const values = { A: null, B: null };
 
 // ---------------- character ----------------
+// Some hair meshes (Johnny's: 78% of the weight) are skinned to the game's own simulated hair bones (dyng_hair_*). The game drives them
+// by its physics, so the exported file hangs their chains off the armature root, not the Head bone, and nothing here moves them: the hair
+// stayed where it was while the head moved. Each such chain is parented to the mesh's own Head bone, keeping its rest position, so it rides with the head.
+function followHead(mesh) {
+  const sk = mesh.skeleton, head = sk.bones.find((b) => b.name === "Head");
+  if (!head) return 0;
+  let n = 0;
+  mesh.parent.updateMatrixWorld(true);
+  for (const b of sk.bones) {
+    if (state.solver.boneIndex.has(b.name) || sk.bones.includes(b.parent)) continue;      // driven, or inside a chain whose root is handled
+    head.attach(b);
+    n++;
+  }
+  return n;
+}
+
 async function buildHead(slot) {
   const holder = new THREE.Group();
   holder.name = `head ${slot}`;
@@ -215,6 +231,7 @@ async function buildHead(slot) {
         o.material = MATERIALS[role]();
         o.frustumCulled = false;
         o.userData.role = m.role;
+        if (role === "hair" && o.isSkinnedMesh) o.userData.loose = followHead(o);
         if (role === "teeth" && o.isSkinnedMesh) colorByBone(o, (name) => (/tongue/i.test(name) ? 0xb4625e : 0xece4d0));
         if (role === "eyes" && /doubled/i.test(o.name)) { o.material.transparent = true; o.material.opacity = 0.12; o.material.depthWrite = false; }
         applyTextures(o, role);

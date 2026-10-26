@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.2 (2026-10-25)
+
+Johnny's hair now moves with his head.
+
+- **Found:** with the video and hybrid heads, Johnny's hair stayed where it was while his head moved. 78% of its weight is on the game's own simulated hair bones (`dyng_hair_*`, 67 bones in all). The game drives those by physics, so the exported file hangs their chains off the armature root, not the Head bone, and nothing in the viewer moved them (a chain's world position was identical at 10 s and at 90 s). Kerry's hair is skinned to head-skeleton bones only, which is why it was fine. Measured as the change in distance between 1,122 hair vertices at the scalp and their nearest skin vertex over seven moments of the clip, with the physics off: mean 3-18 mm, up to 62 mm.
+- **Fix:** each such chain is parented to the hair mesh's own Head bone at load, keeping its rest position, so it rides with the head. Mean change 0.14-0.63 mm (Kerry unchanged, 0.01 mm); the median, 95th and 99th percentile are 0 mm; 31 of 1,063 sampled vertices (3%) still change by more than 5 mm, all about 28 cm below the top of the head, where long hair hangs past the neck and shoulders and the neck skin moves differently from the head. Checked at his largest turns (27 degrees of yaw, 31 of pitch, 27 of roll).
+- **Viewer:** the demo list has a Johnny entry (the song, on Johnny's head); the P key and "Hair physics (P)" label turn the hair spring on and off.
+- **Limits:** the hair rides rigidly with the head (plus the optional spring); the game's own simulation of those bones is not reproduced.
+
 ## 0.4.1 (2026-10-25)
 
 Hair, and a basic hair physics.
